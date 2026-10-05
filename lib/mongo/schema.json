@@ -1,0 +1,1238 @@
+{
+  "records": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "owner",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "kind",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "data",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "assigned_to",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "members": [
+    {
+      "name": "email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "user_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 0
+    },
+    {
+      "name": "name",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "role",
+      "type": "TEXT",
+      "default": "'mr'",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "status",
+      "type": "TEXT",
+      "default": "'active'",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "territory",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "target",
+      "type": "INTEGER",
+      "default": "400000",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "mr_type",
+      "type": "TEXT",
+      "default": "'Medical Representative'",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "district",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "headquarters",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "route",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "phone",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "employee_code",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "route_ids",
+      "type": "TEXT",
+      "default": "'[]'",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "district_ids",
+      "type": "TEXT",
+      "default": "'[]'",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "stockist_ids",
+      "type": "TEXT",
+      "default": "'[]'",
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "notifications": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "recipient",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "title",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "body",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "module",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "record_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 0
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "read_at",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 0
+    }
+  ],
+  "credentials": [
+    {
+      "name": "email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "username",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "password_hash",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "updated",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "login_limits": [
+    {
+      "name": "key",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "attempts",
+      "type": "INTEGER",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "expires",
+      "type": "INTEGER",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "sessions": [
+    {
+      "name": "token_hash",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "expires",
+      "type": "INTEGER",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "benefit_balances": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "kind",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "mr_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "item_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "quantity",
+      "type": "INTEGER",
+      "default": "0",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "value",
+      "type": "INTEGER",
+      "default": "0",
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "benefit_movements": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "kind",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "movement",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "mr_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "item_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "customer_id",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "visit_id",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "quantity",
+      "type": "INTEGER",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "cost",
+      "type": "INTEGER",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "gps",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "commitments": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "invoice_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "customer_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "mr_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "product_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "quantity",
+      "type": "INTEGER",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "fulfilled",
+      "type": "INTEGER",
+      "default": "0",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "notes",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "invoices": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "kind",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "stockist_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "customer_id",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "mr_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "number",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "date",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "items",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "subtotal",
+      "type": "INTEGER",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "total",
+      "type": "INTEGER",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "visit_id",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "notes",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "revision",
+      "type": "INTEGER",
+      "default": "1",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "status",
+      "type": "TEXT",
+      "default": "'Delivered'",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "accepted",
+      "type": "INTEGER",
+      "default": "0",
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "stock_balances": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "stockist_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "product_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "quantity",
+      "type": "INTEGER",
+      "default": "0",
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "stock_movements": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "invoice_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "stockist_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "product_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "quantity",
+      "type": "INTEGER",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "visit_closures": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "mr_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "closed_at",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "gps",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "whatsapp_outbox": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "visit_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "mr_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "phone",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "message",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "status",
+      "type": "TEXT",
+      "default": "'awaiting_setup'",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "error",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "sent_at",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 0
+    }
+  ],
+  "order_edits": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "invoice_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "revision",
+      "type": "INTEGER",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "mr_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "before_data",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "after_data",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "followup_tasks": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "mr_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "customer_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "source",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "due",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "notes",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "status",
+      "type": "TEXT",
+      "default": "'Open'",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "updated",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "period_events": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "month",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "action",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "admin_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "reason",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "period_locks": [
+    {
+      "name": "month",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "closed",
+      "type": "INTEGER",
+      "default": "0",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "closure_id",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "updated",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "admin_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "reason",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "period_reports": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "closure_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "month",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "mr_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "report",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "stock_reservations": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "order_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "stockist_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "product_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "quantity",
+      "type": "INTEGER",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "workflow_requests": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "kind",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "mr_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "record_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "body",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "status",
+      "type": "TEXT",
+      "default": "'Pending'",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "reviewed",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "reason",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "admin_audit": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "actor_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "actor_name",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "action",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "entity_kind",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "entity_id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "before_data",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "after_data",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "reason",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "mr_drafts": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "mr_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "kind",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "payload",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "revision",
+      "type": "INTEGER",
+      "default": "1",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "status",
+      "type": "TEXT",
+      "default": "'Active'",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "updated",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ]
+}

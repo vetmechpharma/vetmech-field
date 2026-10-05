@@ -1,0 +1,2 @@
+import {connect,verify} from './mongo-common.mjs';
+const {client,db}=await connect();try{const name=await verify(db);const session=client.startSession();try{session.startTransaction();await db.collection('_control').updateOne({_id:'preflight'},{$set:{checked:true}},{upsert:true,session});await session.abortTransaction();console.log('MongoDB connected. Replica set: '+name+'. Transaction write and rollback succeeded.')}finally{await session.endSession()}}finally{await client.close()}

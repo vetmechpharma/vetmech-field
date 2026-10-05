@@ -1,0 +1,21 @@
+[Unit]
+Description=VETMECH Field Node.js application
+After=network.target
+
+[Service]
+Type=simple
+User=vetmech
+Group=vetmech
+WorkingDirectory=/opt/vetmech-field/current
+Environment=NODE_ENV=production
+# Adjust /usr/bin/node to the system-wide Node path reported by command -v node.
+ExecStart=/usr/bin/node --env-file=/opt/vetmech-field/shared/.env /opt/vetmech-field/current/scripts/start-server.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
