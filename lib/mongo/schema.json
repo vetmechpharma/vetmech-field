@@ -1234,5 +1234,93 @@
       "pk": 0,
       "notnull": 1
     }
+  ],
+  "communication_settings": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "data",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "updated",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    }
+  ],
+  "email_outbox": [
+    {
+      "name": "id",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "mr_email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "recipient",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "subject",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "message",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "status",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "error",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "created",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "sent_at",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 0
+    }
   ]
 }

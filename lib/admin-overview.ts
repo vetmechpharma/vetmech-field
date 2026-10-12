@@ -3,7 +3,7 @@ import {idList} from './field-rules';
 import {totals,owned,type Row} from './monthly-report';
 import {shiftMonth} from './route-insights';
 export function comparison(m:Member,month:string,records:Row[],invoices:Row[],benefits:Row[],archive?:any){
- const visits=records.filter(r=>r.kind==='Visits'&&owned(r,m)&&(r.data.Date||r.created).startsWith(month)),customerKey=(r:Row)=>r.data['Customer ID']||r.data.Customer;
+ const visits=records.filter(r=>r.kind==='Visits'&&r.data.Status==='Closed'&&owned(r,m)&&(r.data.Date||r.created).startsWith(month)),customerKey=(r:Row)=>r.data['Customer ID']||r.data.Customer;
  const delivered=invoices.filter(i=>i.kind==='secondary'&&i.status==='Delivered'&&i.mr_email===m.email&&i.date.startsWith(month));
  const usage=benefits.filter(b=>b.mr_email===m.email&&b.movement==='issue'&&new Date(b.created).toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}).startsWith(month));
  const result={...totals(m,month,records,invoices),districts:[...new Set([...idList(m.district_ids).map(id=>records.find(r=>r.id===id)?.data.Name).filter(Boolean),...(m.district?[m.district]:[])])],headquarters:m.headquarters,visits:visits.length,repeatVisits:visits.length-new Set(visits.map(customerKey)).size,orderingCustomers:new Set(delivered.map(i=>i.customer_id)).size,sampleCost:usage.filter(b=>b.kind==='sample').reduce((n,b)=>n-b.cost,0),giftCost:usage.filter(b=>b.kind==='gift').reduce((n,b)=>n-b.cost,0),closed:!!archive};

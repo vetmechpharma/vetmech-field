@@ -6,7 +6,7 @@ export function shiftMonth(month:string,n:number){const d=new Date(month+'-01T00
 export function routeInsights(m:Member,month:string,compare:string,inactive:number,records:Row[],invoices:Row[]){
  records=records.map(r=>{if(r.kind!=='Customers')return r;let rid='';try{rid=JSON.parse(r.data['MR route access']||'{}')[m.email]}catch{}if(!idList(m.route_ids).includes(rid))return r;const route=records.find(x=>x.id===rid);return route?{...r,data:{...r.data,Route:route.data.Name,'Route ID':rid}}:r});
  const end=shiftMonth(month,1)+'-01',cutoff=shiftMonth(month,-inactive)+'-01',belongs=(r:Row)=>r.assigned_to?r.assigned_to===m.email:!!m.user_id&&r.owner===m.user_id;
- const visits=records.filter(r=>r.kind==='Visits'&&belongs(r)),customerID=(r:Row)=>r.data['Customer ID']||records.find(c=>c.kind==='Customers'&&c.data.Name===r.data.Customer)?.id||r.data.Customer;
+ const visits=records.filter(r=>r.kind==='Visits'&&r.data.Status==='Closed'&&belongs(r)),customerID=(r:Row)=>r.data['Customer ID']||records.find(c=>c.kind==='Customers'&&c.data.Name===r.data.Customer)?.id||r.data.Customer;
  const allOrders=invoices.filter(i=>i.kind==='secondary'&&i.status!=='Cancelled'&&i.mr_email===m.email).map(i=>({id:i.id,customer:i.customer_id,date:i.date,net:i.subtotal,number:i.number}));
  const legacy=records.filter(r=>['Secondary sales','Orders'].includes(r.kind)&&!r.data['Invoice ID']&&belongs(r)&&r.data.Status!=='Cancelled');
  const orderHistory=[...allOrders,...legacy.map(r=>({id:r.id,customer:customerID(r),date:r.data.Date||r.created.slice(0,10),net:r.kind==='Secondary sales'?Math.round(Number(r.data.Quantity||0)*Number(r.data.Rate||0)*100):0,number:r.data['Order number']||r.data['Invoice number']||'Legacy entry'}))];

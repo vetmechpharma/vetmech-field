@@ -20,4 +20,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Uses an isolated temporary replica set and synthetic test data only.
       - run: pnpm test:mongo
+      - run: pnpm test:ui
       - run: pnpm build

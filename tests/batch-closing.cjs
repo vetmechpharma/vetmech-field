@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+function load(p){const m={exports:{}};new Function('exports','module',ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(m.exports,m);return m.exports}
+const {batchInventory,allocateBatches,expiryLimit}=load('lib/batch-stock.ts'),{closingChecklist}=load('lib/closing-checklist.ts');
+assert.equal(expiryLimit('2026-08-31'),'2027-02-28');assert.equal(expiryLimit('2023-08-31'),'2024-02-29');
+const receipt=(id,batch,expiry,qty)=>({id,kind:'primary',status:'Delivered',stockist_id:'s',items:[{productId:'p',name:'Product',batch,expiry,qty,free:0}]});
+const invoices=[receipt('a','A','2026-11-30',10),receipt('b','B','2027-01-31',20),receipt('c','C','2026-09-30',5)],balances=[{stockist_id:'s',product_id:'p',quantity:35}];
+let rows=batchInventory(invoices,balances);const item={productId:'p',name:'Product',qty:12,free:1};allocateBatches(rows,'s',[item],'2026-10-10');assert.deepEqual(item.allocations.map(a=>a.quantity),[10,3]);assert.throws(()=>allocateBatches(batchInventory(invoices,balances),'s',[{productId:'p',name:'Product',qty:31,free:0}],'2026-10-10'),/unexpired/);
+const order={id:'o',kind:'secondary',status:'Placed',stockist_id:'s',items:[item],date:'2026-10-10',number:'O-1'};rows=batchInventory([...invoices,order],balances);assert.equal(rows.reduce((n,r)=>n+r.reserved,0),13);assert.equal(rows.reduce((n,r)=>n+r.physical,0),35);
+rows=batchInventory([...invoices,{...order,status:'Delivered'}],[{...balances[0],quantity:22}]);assert.equal(rows.find(r=>r.batch==='A').physical,0);assert.equal(rows.find(r=>r.batch==='B').physical,17);assert.equal(rows.reduce((n,r)=>n+r.physical,0),22);
+rows=batchInventory([...invoices,{...order,status:'Cancelled'}],balances);assert.equal(rows.find(r=>r.batch==='A').available,10);
+rows=batchInventory([...invoices,order],balances,'o');assert.equal(rows.find(r=>r.batch==='A').available,10);
+const legacy=batchInventory([], [{stockist_id:'s',product_id:'p',quantity:9}]);assert.equal(legacy[0].expiry,'');assert.equal(legacy[0].available,9);
+let checklist=closingChecklist('2026-10',[order],[{id:'r',kind:'leave',status:'Pending',body:'{}',created:'2026-10-01',mr_email:'mr'}],balances,[],[{...balances[0],quantity:35}]);assert.equal(checklist[0].items.length,1);assert.equal(checklist[1].items.length,1);assert.equal(checklist[2].items.length,1);checklist=closingChecklist('2026-10',[],[],balances,[],[{...balances[0],quantity:35}]);assert.equal(checklist.flatMap(c=>c.items).length,0);
+console.log('PASS: six-month boundaries; FEFO paid/free allocations; expired rejection; reservation, delivery, cancellation, edit release; legacy stock; closing blockers and reconciliation.');

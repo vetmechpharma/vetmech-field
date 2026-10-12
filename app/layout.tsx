@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import {APP_NAME} from "../lib/branding";
 import "./globals.css";
+import "./modern.css";
 
 export const metadata: Metadata = {
-  title: "VETMECH Field",
-  description: "Veterinary field activity and stockist sales management.",
+  title: APP_NAME,
+  applicationName: APP_NAME,
+  description: "VETMECH Field Force MR App — customer visits, GPS attendance, agency orders and monthly performance for veterinary field teams.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

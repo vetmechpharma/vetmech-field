@@ -1,3 +1,7 @@
+import {requestOutsideCustomer} from '../../../lib/field-requests';
+import {customerPriority} from '../../../lib/field-updates';
+import {phoneNumber} from '../../../lib/order-messages';
+import {stockistOrderPhone} from '../../../lib/message-templates';
 import {visitDraft} from '../../../lib/drafts';
 import {audit} from '../../../lib/admin-audit';
 import {duplicateRequest,accessRoute} from '../../../lib/customer-access';
@@ -15,13 +19,14 @@ const balanceSQL="SELECT COALESCE(SUM(CASE WHEN json_extract(data,'$.Movement') 
 
 export async function GET(){try{
  const m=await member();
+ const sales=(await db().prepare("SELECT * FROM invoices WHERE kind='secondary'").all<any>()).results;
  const result=await db().prepare('SELECT * FROM records ORDER BY created DESC, rowid DESC').all<StoredRecord>();
- return json({records:result.results.filter(r=>canRead(m,r)).map(r=>{const data=JSON.parse(r.data);if(m.role==='mr'&&r.kind==='Customers'){const routeId=accessRoute(m,data);if(routeId){const route=result.results.find(x=>x.id===routeId);if(route){data['Route ID']=routeId;data.Route=JSON.parse(route.data).Name;data.District=JSON.parse(route.data).District||'';}}delete data['MR route access'];delete data['Blocked MRs'];}if(m.role==='mr'&&r.kind==='Products'){delete data.PTS;delete data['Unit cost'];}return {...r,data};})});
+ return json({records:result.results.filter(r=>r.kind!=='Leave'&&canRead(m,r)).map(r=>{const data=JSON.parse(r.data);if(m.role==='mr'&&r.kind==='Customers'){const routeId=accessRoute(m,data);if(routeId){const route=result.results.find(x=>x.id===routeId);if(route){data['Route ID']=routeId;data.Route=JSON.parse(route.data).Name;data.District=JSON.parse(route.data).District||'';}}delete data['MR route access'];delete data['Blocked MRs'];delete data['Outside route MRs'];}if(m.role==='mr'&&r.kind==='Products'){delete data.PTS;delete data['Unit cost'];delete data['Sample cost'];}if(m.role==='mr'&&['Samples','Gifts'].includes(r.kind)){for(const k of ['Unit cost','Sample cost','Cost','Total cost','Rate'])delete data[k];}return {...r,data,...(r.kind==='Customers'?{priority:customerPriority({...r,data},sales,result.results.filter(x=>x.kind==='Visits').map(x=>({...x,data:JSON.parse(x.data)})),new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}))}:{})};})});
 }catch(e){return failure(e)}}
 
 export async function POST(req:Request){try{
  sameOrigin(req);const m=await member();const parsed=schema.safeParse(await req.json());
- if(!parsed.success)throw new HttpError(400,'Invalid record. Check the form and retry.');const b=parsed.data;
+ if(!parsed.success)throw new HttpError(400,'Invalid record. Check the form and retry.');const b=parsed.data;if(b.kind==='Tour plan')throw new HttpError(400,'Use route tour planning to preserve plan history.');
  if(JSON.stringify(b.data).length>20000)throw new HttpError(400,'This record is too long.');
  if(m.role!=='admin'&&adminKinds.includes(b.kind))throw new HttpError(403,'Only Admin can change these records.');
  if(['Orders','Secondary sales','Primary sales','Samples'].includes(b.kind))throw new HttpError(400,'Use the invoice, order or allotment screen to keep stock balances correct.');
@@ -29,6 +34,8 @@ export async function POST(req:Request){try{
  const existing=b.id?await db().prepare('SELECT * FROM records WHERE id = ?').bind(b.id).first<StoredRecord>():null;
  if(b.id&&!existing)throw new HttpError(404,'Record not found.');
  if(existing&&(existing.kind!==b.kind||!canWrite(m,existing)))throw new HttpError(403,'You cannot edit this record.');
+ if(b.kind==='Customers'){const prior=existing?JSON.parse(existing.data):{};for(const key of ['Customer status','Status reason','Resume date','Status updated at']){delete b.data[key];if(prior[key])b.data[key]=prior[key];}}
+ if(b.kind==='Stockists'){const selected=b.data['Order WhatsApp contact'];if(selected&&!['Mobile 1','Mobile 2'].includes(selected))throw new HttpError(400,'Choose Mobile 1 or Mobile 2 for stockist order messages.');for(const k of ['Phone','Mobile 2','WhatsApp number'])if(b.data[k]&&!phoneNumber(b.data[k]))throw new HttpError(400,'Enter a valid '+k);if(selected&&!phoneNumber(stockistOrderPhone(b.data)))throw new HttpError(400,'Fill the selected stockist order contact number.');if(b.data.Email&&!z.string().email().safeParse(b.data.Email).success)throw new HttpError(400,'Enter a valid stockist email.');}
  const fieldDay=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
  if(m.role==='mr'&&['Visits','Attendance'].includes(b.kind)){
   if(existing&&JSON.parse(existing.data).Date!==fieldDay)throw new HttpError(403,'Previous-day visits require an Admin correction.');
@@ -45,17 +52,18 @@ export async function POST(req:Request){try{
 
  if(b.kind==='Customers'){
   if(m.role==='mr'&&existing)throw new HttpError(403,'Only Admin can edit customer details.');
-  const route=await db().prepare("SELECT id,data FROM records WHERE kind='Routes' AND json_extract(data,'$.Name')=?").bind(b.data.Route||'').first<{id:string;data:string}>();
+  const route=b.data['Route ID']?await db().prepare("SELECT id,data FROM records WHERE kind='Routes' AND id=?").bind(b.data['Route ID']).first<{id:string;data:string}>():await db().prepare("SELECT id,data FROM records WHERE kind='Routes' AND json_extract(data,'$.Name')=?").bind(b.data.Route||'').first<{id:string;data:string}>();
   if(!route)throw new HttpError(400,'Select the customer route.');
-  if(m.role==='mr'&&!idList(m.route_ids).includes(route.id)&&b.data.Route!==m.route)throw new HttpError(403,'Choose one of your assigned routes.');
-  b.data['Route ID']=route.id;b.data.District=JSON.parse(route.data).District||'';if(m.role==='mr'){delete b.data['Route access'];delete b.data['MR route access'];delete b.data['Blocked MRs'];}
-  if(!b.data.Name?.trim())throw new HttpError(400,'Name is required.');const customerError=validateCustomer(b.data,fieldDay);if(customerError)throw new HttpError(400,customerError);const duplicate=await duplicateRequest(m,b.data,b.id);if(duplicate)return duplicate;
+  const outside=m.role==='mr'&&!idList(m.route_ids).includes(route.id)&&b.data.Route!==m.route;
+  b.data.Route=JSON.parse(route.data).Name;b.data['Route ID']=route.id;b.data.District=JSON.parse(route.data).District||'';if(m.role==='mr'){delete b.data['Route access'];delete b.data['MR route access'];delete b.data['Blocked MRs'];delete b.data['Outside route MRs'];}
+  if(!b.data.Name?.trim())throw new HttpError(400,'Name is required.');const customerError=validateCustomer(b.data,fieldDay);if(customerError)throw new HttpError(400,customerError);if(!outside){const duplicate=await duplicateRequest(m,b.data,b.id);if(duplicate)return duplicate;}
   const invalid=validateCustomer(b.data,new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}));if(invalid)throw new HttpError(400,invalid);
   if(b.data['Mobile 1']!==undefined)b.data.Phone=b.data['Mobile 1'];
   if(customerCategory(b.data)==='Medical / Clinic'){
    const ids=stockistIDs(b.data);for(const stockist of ids){const row=await db().prepare("SELECT id FROM records WHERE kind = 'Stockists' AND id = ?").bind(stockist).first();if(!row)throw new HttpError(400,'A selected stockist is unavailable. Update the clinic’s stockist selection.');}
    b.data['Stockist IDs']=JSON.stringify(ids);
   }
+  if(outside)return requestOutsideCustomer(m,b.data);
  }
  if(b.kind==='Orders'&&b.data.Customer){
   const customer=await db().prepare("SELECT data FROM records WHERE kind = 'Customers' AND json_extract(data,'$.Name') = ?").bind(b.data.Customer).first<{data:string}>();
@@ -155,7 +163,7 @@ export async function POST(req:Request){try{
 export async function DELETE(req:Request){try{
  sameOrigin(req);const m=await member();if(m.role!=='admin')throw new HttpError(403,'Only Admin can delete records.');
  const b=await req.json() as {id?:string};if(typeof b.id!=='string')throw new HttpError(400,'Choose a record.');
- const existing=await db().prepare('SELECT * FROM records WHERE id = ?').bind(b.id).first<StoredRecord>();if(!existing)throw new HttpError(404,'Record not found.');const data=JSON.parse(existing.data);if(data['Invoice ID']||data['Ledger ID'])throw new HttpError(403,'Posted ledger records cannot be deleted individually.');
+ const existing=await db().prepare('SELECT * FROM records WHERE id = ?').bind(b.id).first<StoredRecord>();if(!existing)throw new HttpError(404,'Record not found.');const data=JSON.parse(existing.data);if(existing.kind==='Tour plan')throw new HttpError(400,'Cancel the plan instead of deleting its history.');if(data['Invoice ID']||data['Ledger ID'])throw new HttpError(403,'Posted ledger records cannot be deleted individually.');
 
  if(data.Date)await assertOpen(data.Date);if(data.Month&&existing.id.startsWith('monthly-target:'))await assertOpen(data.Month);
  if(existing.kind==='Stockists'){

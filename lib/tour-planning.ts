@@ -1,0 +1,13 @@
+/** Planning tasks are separate from actual, GPS-closed visits. */
+export const customerStatuses=['Active','Relocated — route change required','Temporarily unavailable','Practice / business closed'] as const;
+export type PlanRow={id:string;kind:string;data:Record<string,string>;assigned_to:string;owner?:string;created?:string};
+export function eligibleForPlan(d:Record<string,string>,date:string){const s=d['Customer status']||'Active';return s==='Active'||s==='Temporarily unavailable'&&!!d['Resume date']&&d['Resume date']<=date;}
+export function customerKey(r:PlanRow,records:PlanRow[]){return r.data['Customer ID']||records.find(c=>c.kind==='Customers'&&c.data.Name===r.data.Customer)?.id||r.data.Customer;}
+export function completedFor(plan:PlanRow,records:PlanRow[],month=plan.data.Date?.slice(0,7)){return records.filter(v=>v.kind==='Visits'&&v.assigned_to===plan.assigned_to&&v.data.Status==='Closed'&&v.data.Date?.startsWith(month)&&customerKey(v,records)===customerKey(plan,records));}
+export function planState(plan:PlanRow,records:PlanRow[],today:string){const visits=completedFor(plan,records);if(visits.some(v=>v.data.Date===plan.data.Date))return 'Completed';if(visits.length)return 'Covered this month';if(['Cancelled','Rescheduled'].includes(plan.data.Status))return plan.data.Status;return plan.data.Date<today?'Overdue':plan.data.Date===today?'Today':'Upcoming';}
+export function tourReport(email:string,month:string,records:PlanRow[]){
+ const plans=records.filter(r=>r.kind==='Tour plan'&&r.assigned_to===email&&r.data.Date?.startsWith(month));
+ const visits=records.filter(r=>r.kind==='Visits'&&r.assigned_to===email&&r.data.Status==='Closed'&&r.data.Date?.startsWith(month));
+ const ids=[...new Set([...plans,...visits].map(p=>customerKey(p,records)))];
+ return {title:'Monthly tour coverage',columns:['Customer','Route','Monthly coverage','Completed visits','Planned dates','Planning history'],rows:ids.map(id=>{const ps=plans.filter(p=>customerKey(p,records)===id),vs=visits.filter(v=>customerKey(v,records)===id),c=records.find(c=>c.id===id);return[c?.data.Name||ps[0]?.data.Customer||vs[0]?.data.Customer||id,c?.data.Route||ps[0]?.data.Route||'—',vs.length?'Visited / Covered':'Not visited',vs.length,ps.map(p=>p.data.Date).join(', ')||'Unplanned visits',ps.map(p=>`${p.data.Date}: ${p.data.Status||'Planned'}${p.data['Plan reason']?' · '+p.data['Plan reason']:''}${p.data['Rescheduled to']?' → '+p.data['Rescheduled to']:''}`).join('; ')]}),note:'At least one completed visit covers the customer for this month, including unplanned visits. Cancelled and rescheduled plans do not count as visits. Original plans and reasons remain in history.'};
+}

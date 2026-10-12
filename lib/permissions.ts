@@ -16,7 +16,7 @@ export function canRead(user:Member,r:StoredRecord){
  if(r.kind==='Districts')return idList(user.district_ids).includes(r.id)||JSON.parse(r.data).Name===user.district;
  return sharedKinds.includes(r.kind)||(!adminKinds.includes(r.kind)&&(r.assigned_to?r.assigned_to===user.email:r.owner===user.user_id));
 }
-export function canWrite(user:Member,r:StoredRecord){return user.role==='admin'||(r.kind!=='Customers'&&!adminKinds.includes(r.kind)&&(r.assigned_to?r.assigned_to===user.email:r.owner===user.user_id));}
+export function canWrite(user:Member,r:StoredRecord){return user.role==='admin'||(r.kind!=='Leave'&&r.kind!=='Customers'&&!adminKinds.includes(r.kind)&&(r.assigned_to?r.assigned_to===user.email:r.owner===user.user_id));}
 export function validateMRFields(kind:string,data:Record<string,string>,existing?:Record<string,string>){
   if(kind==='Expenses'&&data.Status!=='Submitted')return 'Only Admin can approve expenses.';
   if(kind==='Expenses'&&existing&&existing.Status!=='Submitted')return 'Approved or rejected expenses can only be changed by Admin.';

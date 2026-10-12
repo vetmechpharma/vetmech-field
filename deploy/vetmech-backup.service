@@ -1,0 +1,14 @@
+[Unit]
+Description=Encrypted external VETMECH Field backup
+After=network-online.target mongod.service
+Wants=network-online.target
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+EnvironmentFile=/etc/vetmech-backup.env
+# Shared deployment lock prevents source/env changes during capture.
+ExecStart=/usr/bin/flock -n /run/lock/vetmech-field-deploy.lock /opt/vetmech-node/bin/node /usr/local/lib/vetmech-backup/external-backup.mjs
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=2h

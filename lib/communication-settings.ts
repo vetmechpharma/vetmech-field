@@ -1,0 +1,16 @@
+import {db,HttpError} from './server';
+import {communicationEnv,smtpAvailable} from './communication-runtime';
+import {messageTemplates,type TemplateKey,renderMessage} from './message-templates';
+export type CommunicationConfig={whatsappEnabled:boolean;whatsappUrl:string;whatsappKey:string;whatsappSession:string;adminPhone:string;smtpEnabled:boolean;smtpHost:string;smtpPort:number;smtpUser:string;smtpPassword:string;smtpFrom:string;adminEmail:string;templates:Record<TemplateKey,string>};
+export async function communicationConfig():Promise<CommunicationConfig>{
+ const row=await db().prepare("SELECT data FROM communication_settings WHERE id='main'").first<{data:string}>();
+ const old=await db().prepare("SELECT data FROM records WHERE id='whatsapp-settings'").first<{data:string}>();
+ const saved=row?JSON.parse(row.data):{};
+ return {whatsappEnabled:!!communicationEnv.WHATSAPP_WEBHOOK_URL,whatsappUrl:communicationEnv.WHATSAPP_WEBHOOK_URL||'',whatsappSession:communicationEnv.WHATSAPP_SESSION||'primary',adminPhone:JSON.parse(old?.data||'{}')['Admin WhatsApp number']||'',smtpEnabled:false,smtpHost:'',smtpPort:587,smtpUser:'',smtpFrom:'',adminEmail:'',...saved,whatsappKey:saved.whatsappKey?await unseal(saved.whatsappKey):communicationEnv.WHATSAPP_API_KEY||'',smtpPassword:saved.smtpPassword?await unseal(saved.smtpPassword):'',templates:{...Object.fromEntries(Object.entries(messageTemplates).map(([k,v])=>[k,v.body])),...saved.templates}};
+}
+export function publicConfig(c:CommunicationConfig){const {whatsappKey,smtpPassword,...safe}=c;return {...safe,hasWhatsappKey:!!whatsappKey,hasSmtpPassword:!!smtpPassword,secretsReady:!!communicationEnv.COMMUNICATIONS_SECRET,smtpAvailable};}
+async function key(){const raw=communicationEnv.COMMUNICATIONS_SECRET;if(!raw||raw.length<32)throw new HttpError(400,'Add COMMUNICATIONS_SECRET to the server environment before saving API or SMTP passwords.');return crypto.subtle.importKey('raw',await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw)),'AES-GCM',false,['encrypt','decrypt']);}
+export async function seal(raw:string){if(!raw)return '';const iv=crypto.getRandomValues(new Uint8Array(12)),encrypted=await crypto.subtle.encrypt({name:'AES-GCM',iv},await key(),new TextEncoder().encode(raw));return 'v1:'+btoa(String.fromCharCode(...iv))+':'+btoa(String.fromCharCode(...new Uint8Array(encrypted)));}
+async function unseal(value:string){try{const [,iv,body]=value.split(':');return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:Uint8Array.from(atob(iv),c=>c.charCodeAt(0))},await key(),Uint8Array.from(atob(body),c=>c.charCodeAt(0))));}catch{throw new HttpError(503,'Stored communication credentials cannot be opened. Restore the original COMMUNICATIONS_SECRET.');}}
+export async function messageBody(type:TemplateKey,values:Record<string,string>){const config=await communicationConfig();return renderMessage(config.templates[type],values);}
+export async function cleanupCommunicationLogs(){const before=new Date(Date.now()-30*86400000).toISOString();await db().batch([db().prepare('DELETE FROM whatsapp_outbox WHERE created<?').bind(before),db().prepare('DELETE FROM email_outbox WHERE created<?').bind(before)]);}

@@ -1,0 +1,3 @@
+import {db,json,notification} from './server';
+import {OWNER_EMAIL,type Member} from './permissions';
+export async function requestOutsideCustomer(m:Member,data:Record<string,string>){const id=crypto.randomUUID();await db().batch([db().prepare("INSERT INTO workflow_requests(id,kind,mr_email,record_id,body,status,created) VALUES (?,'outside_customer',?,'',?,'Pending',?)").bind(id,m.email,JSON.stringify({submitted:data,routeId:data['Route ID']}),new Date().toISOString()),notification(OWNER_EMAIL,'Outside-route customer approval',`${m.name} · ${data.Name} · ${data.Route}`,'Approvals',id)]);return json({ok:true,accessRequested:true,message:'Customer submitted for outside-route approval. No customer record was created yet.'});}

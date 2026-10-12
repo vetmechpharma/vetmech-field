@@ -12,7 +12,7 @@ export function defaults(table:string){const cols=(schema as any)[table];if(!col
 export const options=(c:Context)=>c.session?{session:c.session}:{};
 export async function rows(c:Context,table:string,filter:any={},sort:any={},limit?:number){const cursor=c.db.collection(table).find(filter,options(c)).sort(sort);if(limit)cursor.limit(limit);return cursor.toArray()}
 export async function one(c:Context,table:string,filter:any={}){return c.db.collection(table).findOne(filter,options(c))}
-export async function put(c:Context,table:string,d:any){return c.db.collection(table).insertOne(stored({...defaults(table),...d}),options(c))}
+export async function put(c:Context,table:string,d:any){return c.db.collection(table).insertOne(stored({...defaults(table),...d,...(['whatsapp_outbox','email_outbox'].includes(table)?{expires_at:new Date(Date.parse(d.created)+30*86400000)}:{})}),options(c))}
 export async function replace(c:Context,table:string,d:any){return c.db.collection(table).replaceOne({_id:d._id},stored(d),options(c))}
 function makeFilter(expr:string,args:any[]){return {$expr:mongoExpr(parse(expr,args))}}
 export async function genericSelect(c:Context,q:string,args:any[]):Promise<Result>{
