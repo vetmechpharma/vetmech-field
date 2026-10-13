@@ -40,6 +40,14 @@ jobs:
       - name: Install dependencies
         working-directory: mobile
         run: npm install --no-audit --no-fund
+      - name: Check installed dependency tree
+        working-directory: mobile
+        run: npm ls --depth=0
+      - name: Verify Expo SDK dependency compatibility
+        working-directory: mobile
+        env:
+          CI: '1'
+        run: npx expo install --check
       - name: Check types
         working-directory: mobile
         run: npx tsc --noEmit
@@ -51,6 +59,14 @@ jobs:
         env:
           NODE_ENV: production
         run: ./gradlew --no-daemon assembleRelease
+      - name: Verify standalone JavaScript bundle is inside APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="mobile/android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          unzip -l "$APK" | grep -F 'assets/index.android.bundle'
+          echo "Standalone JavaScript bundle confirmed in APK."
       - uses: actions/upload-artifact@v4
         with:
           name: VETMECH-MR-NATIVE-standalone-apk
