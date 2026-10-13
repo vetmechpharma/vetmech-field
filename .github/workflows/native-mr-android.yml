@@ -31,11 +31,11 @@ jobs:
       - name: Generate Android project
         working-directory: mobile
         run: CI=1 npx expo prebuild --platform android --non-interactive
-      - name: Build debug APK
+      - name: Build standalone release APK
         working-directory: mobile/android
-        run: ./gradlew --no-daemon assembleDebug
+        run: ./gradlew --no-daemon assembleRelease
       - uses: actions/upload-artifact@v4
         with:
-          name: VETMECH-MR-NATIVE-debug-apk
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          name: VETMECH-MR-NATIVE-standalone-apk
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
