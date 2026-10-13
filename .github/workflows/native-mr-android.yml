@@ -6,7 +6,7 @@ on:
       - 'mobile/**'
       - '.github/workflows/native-mr-android.yml'
 jobs:
-  debug-apk:
+  standalone-apk:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,6 +22,21 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+      - name: Install and verify CMake 3.22.1 (retry failed SDK downloads)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            echo "CMake installation attempt $attempt"
+            if sdkmanager --install 'cmake;3.22.1' && test -x "$ANDROID_HOME/cmake/3.22.1/bin/cmake"; then
+              "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --version
+              exit 0
+            fi
+            rm -rf "$ANDROID_HOME/cmake/3.22.1"
+            sleep $((attempt * 10))
+          done
+          echo 'CMake 3.22.1 could not be installed after four attempts' >&2
+          exit 1
       - name: Install dependencies
         working-directory: mobile
         run: npm install --no-audit --no-fund
@@ -33,6 +48,8 @@ jobs:
         run: CI=1 npx expo prebuild --platform android --non-interactive
       - name: Build standalone release APK
         working-directory: mobile/android
+        env:
+          NODE_ENV: production
         run: ./gradlew --no-daemon assembleRelease
       - uses: actions/upload-artifact@v4
         with:
