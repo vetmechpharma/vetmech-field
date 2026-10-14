@@ -1,0 +1,74 @@
+name: Build native VETMECH MR APK
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/native-mr-android.yml'
+jobs:
+  standalone-apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+      - name: Install and verify CMake 3.22.1 (retry failed SDK downloads)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            echo "CMake installation attempt $attempt"
+            if sdkmanager --install 'cmake;3.22.1' && test -x "$ANDROID_HOME/cmake/3.22.1/bin/cmake"; then
+              "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --version
+              exit 0
+            fi
+            rm -rf "$ANDROID_HOME/cmake/3.22.1"
+            sleep $((attempt * 10))
+          done
+          echo 'CMake 3.22.1 could not be installed after four attempts' >&2
+          exit 1
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm install --no-audit --no-fund
+      - name: Check installed dependency tree
+        working-directory: mobile
+        run: npm ls --depth=0
+      - name: Verify Expo SDK dependency compatibility
+        working-directory: mobile
+        env:
+          CI: '1'
+        run: npx expo install --check
+      - name: Check types
+        working-directory: mobile
+        run: npx tsc --noEmit
+      - name: Generate Android project
+        working-directory: mobile
+        run: CI=1 npx expo prebuild --platform android --non-interactive
+      - name: Build standalone release APK
+        working-directory: mobile/android
+        env:
+          NODE_ENV: production
+        run: ./gradlew --no-daemon assembleRelease
+      - name: Verify standalone JavaScript bundle is inside APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="mobile/android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          unzip -l "$APK" | grep -F 'assets/index.android.bundle'
+          echo "Standalone JavaScript bundle confirmed in APK."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VETMECH-MR-NATIVE-standalone-apk
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error

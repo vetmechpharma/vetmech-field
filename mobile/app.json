@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "VETMECH MR",
+    "slug": "vetmech-mr-native",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "vetmechmr",
+    "android": {
+      "package": "in.vetmechpharma.mr",
+      "versionCode": 2,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "INTERNET"
+      ],
+      "usesCleartextTraffic": false
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "GPS is required for verified VETMECH MR field attendance and visits."
+        }
+      ]
+    ],
+    "extra": {
+      "apiBaseUrl": "https://mr.vetmechpharma.in"
+    },
+    "userInterfaceStyle": "light"
+  }
+}
