@@ -1,0 +1,109 @@
+/* Shared Admin/MR layout: screen rules intentionally leave branded print layouts alone. */
+@media screen {
+ .app-shell,.app-shell main,.content,.workflow-panel,.reports-workspace{min-width:0;max-width:100%}
+ .content{width:100%;padding-inline:clamp(16px,2.5vw,36px)}
+ .content>*,.panel>*,.dialog-inner>*,.form-grid>*,.invoice-line-editor>*{min-width:0}
+ .page-heading,.panel-heading,.workflow-toolbar,.records-toolbar,.line-items-heading{display:flex;flex-wrap:wrap;gap:16px;align-items:center}
+ .page-heading>div:first-child,.workflow-toolbar>div:first-child{flex:1 1 260px}
+ .heading-actions,.dialog-actions,.field-actions,.order-controls,.view-tools-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;min-width:0}
+ .heading-actions{padding-top:0;max-width:100%}
+ .heading-actions .primary,.heading-actions .secondary{font-size:14px;width:auto;height:auto;min-height:44px;padding:10px 16px;white-space:normal}
+ .primary,.secondary,.danger-button{white-space:normal;text-align:center;max-width:100%;overflow-wrap:break-word}
+ button svg,a svg{flex-shrink:0}
+ .content p,.content h2,.content h3,.content h4,.dialog h2,.dialog p,.member-card,.message-card{overflow-wrap:anywhere}
+ .stats,.hub-cards,.stock-grid,.location-grid,.sample-balance-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:18px}
+ .team-grid{grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr))}
+ .dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .admin-filters,.communication-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px}
+ .admin-filters>label,.communication-filters>label{flex:1 1 180px;min-width:0}
+ .admin-filters>button,.communication-filters>button{align-self:flex-end}
+ .filter-controls{min-width:0}.search-field{width:100%;min-width:0}
+ .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:20px}
+ .form-grid .full-field{grid-column:1/-1}
+ .form-grid label,.workflow-dialog form>label,.communication-settings label{display:block;min-width:0}
+ .form-grid input:not([type=checkbox]):not([type=radio]),.form-grid select,.form-grid textarea,.workflow-dialog form>label>input,.workflow-dialog form>label>textarea{display:block;width:100%;margin-top:7px;box-sizing:border-box}
+ input[type=checkbox],input[type=radio]{width:18px!important;height:18px;min-height:18px!important;flex:0 0 18px;vertical-align:middle;margin:0 8px 0 0!important}
+ .check-grid,.stockist-checkboxes{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:10px}
+ .check-grid label,.stockist-checkboxes label{display:flex;align-items:flex-start;gap:8px;min-width:0;padding:12px;line-height:1.5}
+ .check-grid label>span,.stockist-checkboxes label>span{min-width:0;overflow-wrap:anywhere}
+ .check-grid input,.stockist-checkboxes input{margin-top:3px!important}
+ .dialog,.workflow-dialog{box-sizing:border-box;width:min(960px,calc(100vw - 40px));max-width:calc(100vw - 40px);max-height:calc(100dvh - 40px);overflow:auto;overscroll-behavior:contain}
+ .dialog-inner{padding:clamp(18px,3vw,30px);min-width:0}
+ .dialog-header{display:flex;align-items:flex-start;gap:16px}.dialog-header h2{flex:1;min-width:0;margin:0;font-size:clamp(20px,2.4vw,25px)}
+ .dialog-actions{justify-content:flex-end;border-top:1px solid var(--line);margin-top:20px;padding-top:18px}
+ .invoice-line-editor{grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;gap:16px;position:relative}
+ .invoice-line-editor>label:first-child{grid-column:1/-1}
+ .invoice-line-editor>fieldset{grid-column:1/-1;border:1px solid #cddce7;border-radius:12px;padding:16px;background:white}
+ .invoice-line-editor legend{font-weight:700;padding:0 6px;color:#254b63}
+ .invoice-line-editor>fieldset>div{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:12px}
+ .invoice-line-editor>fieldset>div>label{flex:1 1 220px;min-width:0}
+ .invoice-line-editor input,.invoice-line-editor select{width:100%;box-sizing:border-box}
+ .invoice-line-editor>.icon-button{grid-column:-2/-1;justify-self:end;min-height:44px;min-width:44px}
+ .line-price{grid-column:1/-1;margin:0}
+ .product-scheme-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:end;margin:12px 0;padding:14px;background:#f3f7fb;border:1px solid #dce6ee;border-radius:12px}
+ .product-scheme-row button{min-height:46px}
+ .product-transfer{padding:20px;margin-bottom:20px}.product-transfer .heading-actions{justify-content:flex-start}
+ .product-import-scroll{overflow:auto;max-width:100%;max-height:50dvh;margin:16px 0;border:1px solid var(--line);border-radius:10px}
+ .product-import-scroll table{min-width:850px;width:100%;border-collapse:collapse}.product-import-scroll th,.product-import-scroll td{padding:12px;vertical-align:top;text-align:left;border-bottom:1px solid var(--line)}
+ .product-import-scroll th{background:#edf3fb}.product-import-scroll td small{display:block}
+ .report-scroll,.table-scroll,.desktop-table,.performance-table,.territory-master-scroll{width:100%;max-width:100%;min-width:0;overflow:auto;overscroll-behavior-inline:contain;-webkit-overflow-scrolling:touch}
+ .report-scroll table,.table-scroll table,.performance-table table{width:100%;min-width:640px}
+ .report-scroll th,.table-scroll th,.performance-table th{white-space:normal}
+ .report-scroll td,.table-scroll td,.performance-table td{overflow-wrap:break-word}
+ .invoice-card summary,.message-card summary,.tour-plan-card,.rep-summary-head{flex-wrap:wrap;gap:14px}
+ .invoice-card summary>span,.message-card summary>span,.tour-plan-card>div{min-width:0;overflow-wrap:anywhere}
+ .invoice-lines>div,.balance-line{flex-wrap:wrap;gap:12px}
+ .balance-line>span{flex:1 1 150px;min-width:0}.balance-line strong{font-variant-numeric:tabular-nums}
+ .report-controls,.field-panel,.communication-settings,.followup-dashboard{margin-bottom:20px}
+ .report-summary,.followup-summary,.attendance-summary{display:flex;flex-wrap:wrap;gap:12px}
+ .report-summary>*,.followup-summary>*,.attendance-summary>*{min-width:0;overflow-wrap:anywhere}
+ .calendar-weekdays,.calendar-days{grid-template-columns:repeat(7,minmax(0,1fr))}
+ .calendar-days>*{min-width:0;overflow-wrap:anywhere}
+ .hub-tabs,.customer-directory-tabs,.customer-type-picker{display:flex;flex-wrap:wrap;gap:8px}
+ .hub-tabs button,.customer-directory-tabs button,.customer-type-picker button{min-height:44px;white-space:normal}
+ .view-tools{min-width:0;flex-wrap:wrap;gap:14px}
+ .minimal-login .login-panel,.minimal-login .login-layout{min-width:0;max-width:100%}
+}
+@media screen and (max-width:1100px){
+ .dashboard-grid{grid-template-columns:minmax(0,1fr)}
+ .invoice-line-editor{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .topbar{gap:12px;padding-inline:20px}.topbar .header-date{display:none}
+ .page-heading .heading-actions{width:100%;justify-content:flex-start}
+}
+@media screen and (max-width:760px){
+ .content{padding:20px 14px calc(100px + env(safe-area-inset-bottom))}
+ .topbar{padding:12px 14px;align-items:center}.breadcrumb{flex:1;min-width:0}.breadcrumb b{overflow-wrap:anywhere}
+ .topbar-actions{flex-shrink:0}.topbar .avatar{display:none}
+ .page-heading{display:block}.page-heading .heading-actions{margin-top:16px}
+ .page-heading h1{font-size:27px;letter-spacing:-.6px}
+ .heading-actions .primary,.heading-actions .secondary{flex:1 1 160px;font-size:14px;width:auto;height:auto;padding:11px 14px}
+ .panel:not(.records-panel):not(.territory-master){padding:18px}
+ .panel-heading h2{font-size:18px}.panel-heading{margin-bottom:16px}
+ .form-grid,.product-scheme-row{grid-template-columns:minmax(0,1fr)}
+ .invoice-line-editor{grid-template-columns:minmax(0,1fr)!important;padding:16px}
+ .invoice-line-editor>*{grid-column:1/-1}.invoice-line-editor>.icon-button{grid-column:1;justify-self:end}
+ .invoice-line-editor>fieldset>div>button{flex:0 1 auto}
+ .dialog,.workflow-dialog{width:calc(100vw - 16px)!important;max-width:calc(100vw - 16px);max-height:calc(100dvh - 24px);margin:auto;border-radius:18px}
+ .dialog-inner{padding:18px!important}.dialog-actions button{flex:1 1 140px}
+ .content input:not([type=checkbox]):not([type=radio]),.content select,.content textarea,.dialog input:not([type=checkbox]):not([type=radio]),.dialog select,.dialog textarea{font-size:16px}
+ .admin-filters,.records-toolbar,.communication-filters{gap:12px;align-items:stretch}
+ .admin-filters>label,.communication-filters>label{flex-basis:100%}
+ .admin-filters>button,.communication-filters>button{flex:1 1 140px}
+ .filter-controls{width:100%;flex-basis:100%;flex-wrap:wrap}.filter-controls select{flex:1 1 140px}
+ .workflow-toolbar>div{flex-basis:100%}.workflow-toolbar>.primary,.workflow-toolbar>.secondary{flex:1 1 150px}
+ .field-actions button,.order-controls button{flex:1 1 150px;min-height:44px}
+ .row-actions .icon-button{min-width:44px;min-height:44px}
+ .invoice-card summary strong{font-size:17px}.invoice-lines{padding:0 16px 16px}
+ .order-summary{align-items:stretch}.order-summary>label{width:100%}.order-summary input{width:100%}
+ .calendar-days>*{padding:5px;min-height:68px;font-size:12px}.calendar-days small{font-size:10px;line-height:1.3}
+ .calendar-weekdays{font-size:11px}.attendance-calendar{min-width:0}
+ .product-scheme-row button{width:100%}.product-transfer .heading-actions{display:grid;grid-template-columns:minmax(0,1fr);width:100%}
+ .view-tools-actions{width:100%}.view-tools-actions button{flex:1 1 130px}
+}
+@media screen and (max-width:400px){
+ .content{padding-inline:10px}.topbar{padding-inline:10px}.page-heading h1{font-size:25px}
+ .stats,.hub-cards,.quick-grid,.management-action-grid,.member-details{grid-template-columns:minmax(0,1fr)}
+ .customer-directory-panel .filter-controls{grid-template-columns:minmax(0,1fr)}
+ .account-password-button{font-size:12px;padding:8px;min-height:44px}
+ .calendar-days>*{padding:3px;min-height:60px}.calendar-days small{font-size:9px}
+}

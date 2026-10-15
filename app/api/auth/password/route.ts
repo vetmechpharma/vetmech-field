@@ -1,9 +1,9 @@
 import {z} from 'zod';
 import {member,db,sameOrigin,failure,HttpError} from '../../../../lib/server';
 import {passwordHash,verifyPassword,sessionCookie} from '../../../../lib/passwords';
-const schema=z.object({currentPassword:z.string().min(1).max(128),newPassword:z.string().min(12).max(128)});
+const schema=z.object({currentPassword:z.string().min(1).max(128),newPassword:z.string().min(1).max(128)});
 export async function POST(req:Request){try{
- sameOrigin(req);const m=await member();const parsed=schema.safeParse(await req.json());if(!parsed.success)throw new HttpError(400,'Use a new password of 12–128 characters.');
+ sameOrigin(req);const m=await member();const parsed=schema.safeParse(await req.json());if(!parsed.success)throw new HttpError(400,'Enter a non-empty password of up to 128 characters.');if(m.role!=='mr'&&parsed.data.newPassword.length<12)throw new HttpError(400,'Admin passwords must contain at least 12 characters.');
  const c=await db().prepare('SELECT password_hash FROM credentials WHERE email=?').bind(m.email).first<{password_hash:string}>();
  if(!c||!await verifyPassword(parsed.data.currentPassword,c.password_hash))throw new HttpError(400,'Current password is incorrect.');
  if(parsed.data.currentPassword===parsed.data.newPassword)throw new HttpError(400,'Choose a different new password.');

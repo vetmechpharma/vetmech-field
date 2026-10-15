@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+const m={exports:{}};new Function('exports','module',ts.transpileModule(fs.readFileSync('lib/product-csv.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(m.exports,m);const {readCSV,writeCSV,previewProducts,productCSV,productHeaders}=m.exports;
+const row={id:'p',kind:'Products',data:{Name:'Product, "A"\nTamil தமிழ்',Pack:'100 ml',MRP:'100',PTR:'80',PTS:'65','Sample cost':'20','Scheme 4 enabled':'Yes','Scheme 4 paid':'5','Scheme 4 free':'1'}};
+const csv=productCSV([row],true),preview=previewProducts(csv,[row]);assert.equal(preview.length,1);assert.equal(preview[0].error,'');assert.equal(preview[0].id,'p');assert.equal(preview[0].data['Sample cost'],'20');assert.equal(preview[0].data['Scheme 1 paid'],'5');assert.equal(preview[0].data['Scheme 4 enabled'],'No');assert(!readCSV(productCSV([row],false))[0].includes('PTS'));assert(!productCSV([row],false).includes('Sample cost'));
+const input=(name='Test',price='10',offers='5+1; 10+3')=>[name,'100 ml',price,'8','6',offers];
+assert(previewProducts(writeCSV([productHeaders,input(),input('test')]),[])[1].error.includes('Duplicate'));
+assert(previewProducts(writeCSV([productHeaders,input('Test','-1')]),[])[0].error.includes('MRP'));
+assert(previewProducts(writeCSV([productHeaders,input('Test','10','5+0')]),[])[0].error.includes('buy+free'));
+assert(previewProducts(writeCSV([productHeaders,input('Test','10','5+1;5+1')]),[])[0].error.includes('Duplicate'));
+assert.equal(previewProducts(writeCSV([productHeaders,input('Test','10','')]),[])[0].data['Scheme 1 enabled'],'No');
+assert.throws(()=>readCSV('"unclosed'),/Unclosed/);assert.throws(()=>previewProducts('Bad,Header\na,b',[]),/template/);
+const formula=productCSV([{...row,data:{...row.data,Name:'=DANGEROUS()'}}],true);assert(formula.includes("'=DANGEROUS()"));assert.equal(previewProducts(formula,[])[0].name,'=DANGEROUS()');
+console.log('PASS: product CSV round-trip, Unicode/quotes/newlines, preview updates, duplicate and price/scheme validation, formula escaping and MR PTS exclusion.');

@@ -1,3 +1,4 @@
+import {headquartersDistrictIDs,headquartersCovers,districtState} from '../../../lib/geography';
 import {requestOutsideCustomer} from '../../../lib/field-requests';
 import {customerPriority} from '../../../lib/field-updates';
 import {phoneNumber} from '../../../lib/order-messages';
@@ -21,7 +22,8 @@ export async function GET(){try{
  const m=await member();
  const sales=(await db().prepare("SELECT * FROM invoices WHERE kind='secondary'").all<any>()).results;
  const result=await db().prepare('SELECT * FROM records ORDER BY created DESC, rowid DESC').all<StoredRecord>();
- return json({records:result.results.filter(r=>r.kind!=='Leave'&&canRead(m,r)).map(r=>{const data=JSON.parse(r.data);if(m.role==='mr'&&r.kind==='Customers'){const routeId=accessRoute(m,data);if(routeId){const route=result.results.find(x=>x.id===routeId);if(route){data['Route ID']=routeId;data.Route=JSON.parse(route.data).Name;data.District=JSON.parse(route.data).District||'';}}delete data['MR route access'];delete data['Blocked MRs'];delete data['Outside route MRs'];}if(m.role==='mr'&&r.kind==='Products'){delete data.PTS;delete data['Unit cost'];delete data['Sample cost'];}if(m.role==='mr'&&['Samples','Gifts'].includes(r.kind)){for(const k of ['Unit cost','Sample cost','Cost','Total cost','Rate'])delete data[k];}return {...r,data,...(r.kind==='Customers'?{priority:customerPriority({...r,data},sales,result.results.filter(x=>x.kind==='Visits').map(x=>({...x,data:JSON.parse(x.data)})),new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}))}:{})};})});
+ const geography=result.results.filter(r=>['Districts','Headquarters','Routes'].includes(r.kind)).map(r=>({...r,data:JSON.parse(r.data)}));
+ return json({records:result.results.filter(r=>r.kind!=='Leave'&&canRead(m,r)).map(r=>{const data=JSON.parse(r.data);if(m.role==='mr'&&r.kind==='Customers'){const routeId=accessRoute(m,data);if(routeId){const route=result.results.find(x=>x.id===routeId);if(route){data['Route ID']=routeId;data.Route=JSON.parse(route.data).Name;data.District=JSON.parse(route.data).District||'';data.Headquarters=JSON.parse(route.data).Headquarters||'';}}delete data['MR route access'];delete data['Blocked MRs'];delete data['Outside route MRs'];}if(r.kind==='Customers')data.State=districtState(data.District,geography);if(m.role==='mr'&&r.kind==='Products'){delete data.PTS;delete data['Unit cost'];delete data['Sample cost'];}if(m.role==='mr'&&['Samples','Gifts'].includes(r.kind)){for(const k of ['Unit cost','Sample cost','Cost','Total cost','Rate'])delete data[k];}return {...r,data,...(r.kind==='Customers'?{priority:customerPriority({...r,data},sales,result.results.filter(x=>x.kind==='Visits').map(x=>({...x,data:JSON.parse(x.data)})),new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}))}:{})};})});
 }catch(e){return failure(e)}}
 
 export async function POST(req:Request){try{
@@ -55,7 +57,7 @@ export async function POST(req:Request){try{
   const route=b.data['Route ID']?await db().prepare("SELECT id,data FROM records WHERE kind='Routes' AND id=?").bind(b.data['Route ID']).first<{id:string;data:string}>():await db().prepare("SELECT id,data FROM records WHERE kind='Routes' AND json_extract(data,'$.Name')=?").bind(b.data.Route||'').first<{id:string;data:string}>();
   if(!route)throw new HttpError(400,'Select the customer route.');
   const outside=m.role==='mr'&&!idList(m.route_ids).includes(route.id)&&b.data.Route!==m.route;
-  b.data.Route=JSON.parse(route.data).Name;b.data['Route ID']=route.id;b.data.District=JSON.parse(route.data).District||'';if(m.role==='mr'){delete b.data['Route access'];delete b.data['MR route access'];delete b.data['Blocked MRs'];delete b.data['Outside route MRs'];}
+  b.data.Route=JSON.parse(route.data).Name;b.data['Route ID']=route.id;b.data.District=JSON.parse(route.data).District||'';b.data.Headquarters=JSON.parse(route.data).Headquarters||'';const district=await db().prepare("SELECT data FROM records WHERE kind='Districts' AND json_extract(data,'$.Name')=?").bind(b.data.District).first<{data:string}>();b.data.State=district?JSON.parse(district.data).State||'':'';if(m.role==='mr'){delete b.data['Route access'];delete b.data['MR route access'];delete b.data['Blocked MRs'];delete b.data['Outside route MRs'];}
   if(!b.data.Name?.trim())throw new HttpError(400,'Name is required.');const customerError=validateCustomer(b.data,fieldDay);if(customerError)throw new HttpError(400,customerError);if(!outside){const duplicate=await duplicateRequest(m,b.data,b.id);if(duplicate)return duplicate;}
   const invalid=validateCustomer(b.data,new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}));if(invalid)throw new HttpError(400,invalid);
   if(b.data['Mobile 1']!==undefined)b.data.Phone=b.data['Mobile 1'];
@@ -85,10 +87,28 @@ export async function POST(req:Request){try{
   const duplicate=await db().prepare("SELECT id FROM records WHERE kind = ? AND lower(trim(json_extract(data,'$.Name'))) = lower(?) AND id <> ?").bind(b.kind,b.data.Name,b.id||'').first();
   if(duplicate)throw new HttpError(409,'A record with this name already exists. Edit that record or use a distinct name.');
  }
- if(b.kind==='Routes'){if(!b.data.District||!await db().prepare("SELECT id FROM records WHERE kind='Districts' AND json_extract(data,'$.Name')=?").bind(b.data.District).first())throw new HttpError(400,'Every route must belong to a district.');}
+ if(b.kind==='Stockists'&&(b.data['District IDs']!==undefined||b.data.District)){
+  const geography=(await db().prepare('SELECT id,kind,data FROM records').all<{id:string;kind:string;data:string}>()).results.map(r=>({...r,data:JSON.parse(r.data)}));
+  if(b.data['District IDs']!==undefined){let ids:unknown;try{ids=JSON.parse(b.data['District IDs'])}catch{throw new HttpError(400,'Choose valid stockist districts.')}if(!Array.isArray(ids)||ids.some(id=>typeof id!=='string'))throw new HttpError(400,'Choose valid stockist districts.');}
+  const ids=headquartersDistrictIDs(b.data,geography);if((b.data.District&&!ids.length)||ids.some(id=>!geography.some(r=>r.id===id&&r.kind==='Districts')))throw new HttpError(400,'Choose valid stockist districts.');
+  b.data['District IDs']=JSON.stringify(ids);b.data.District=geography.find(r=>r.id===ids[0])?.data.Name||'';
+ }
+ if(['Headquarters','Routes'].includes(b.kind)){
+  const geography=(await db().prepare("SELECT id,kind,data FROM records").all<{id:string;kind:string;data:string}>()).results.map(r=>({...r,data:JSON.parse(r.data)}));
+  if(b.kind==='Headquarters'){
+   const ids=headquartersDistrictIDs(b.data,geography);
+   if(!ids.length||ids.some(id=>!geography.some(r=>r.id===id&&r.kind==='Districts')))throw new HttpError(400,'Select at least one valid district for this headquarters.');
+   if(old&&geography.some(r=>r.kind==='Routes'&&r.data.Headquarters===old.Name&&!headquartersCovers(b.data,r.data.District,geography)))throw new HttpError(409,'A route still uses a district you removed. Reassign that route before removing the district.');
+   b.data['District IDs']=JSON.stringify(ids);b.data.District=geography.find(r=>r.id===ids[0])!.data.Name;
+  }else{
+   if(!b.data.District||!geography.some(r=>r.kind==='Districts'&&r.data.Name===b.data.District))throw new HttpError(400,'Every route must belong to a district.');
+   if(b.data.Headquarters&&!geography.some(r=>r.kind==='Headquarters'&&r.data.Name===b.data.Headquarters&&headquartersCovers(r.data,b.data.District,geography)))throw new HttpError(400,'Choose a headquarters that covers this route’s district.');
+  }
+ }
+
  if(b.kind==='Gifts'){b.data['One per customer']=b.data['One per customer']||'Yes';if(!['Yes','No'].includes(b.data['One per customer']))throw new HttpError(400,'Choose Yes or No for the gift repeat rule.');if(Number(b.data['Unit cost'])<0||!Number.isFinite(Number(b.data['Unit cost'])))throw new HttpError(400,'Enter a valid gift cost.');}
  if(b.kind==='Products'){
-  for(const i of [1,2,3])if(b.data[`Scheme ${i} enabled`]==='Yes'&&(!Number.isInteger(Number(b.data[`Scheme ${i} paid`]))||Number(b.data[`Scheme ${i} paid`])<1||!Number.isInteger(Number(b.data[`Scheme ${i} free`]))||Number(b.data[`Scheme ${i} free`])<1))throw new HttpError(400,`Scheme ${i} needs positive paid and free quantities.`);
+  for(const i of Array.from({length:20},(_,n)=>n+1))if(b.data[`Scheme ${i} enabled`]==='Yes'&&(!Number.isInteger(Number(b.data[`Scheme ${i} paid`]))||Number(b.data[`Scheme ${i} paid`])<1||!Number.isInteger(Number(b.data[`Scheme ${i} free`]))||Number(b.data[`Scheme ${i} free`])<1))throw new HttpError(400,`Scheme ${i} needs positive paid and free quantities.`);
   if(b.data['Retail offer enabled']==='Yes'&&!(Number(b.data['Retail offer rate'])>0))throw new HttpError(400,'Enter a positive retail offer rate.');
   if(b.data['Price mode']&&!['PTR','PTS','Offer rate','Special rate'].includes(b.data['Price mode']))throw new HttpError(400,'Choose PTR, PTS, offer rate or special rate.');
   if(b.data['Scheme enabled']==='Yes'&&(!Number.isInteger(Number(b.data['Scheme paid quantity']))||Number(b.data['Scheme paid quantity'])<1||!Number.isInteger(Number(b.data['Scheme free quantity']))||Number(b.data['Scheme free quantity'])<1))throw new HttpError(400,'An enabled scheme needs positive whole paid and free quantities.');
@@ -96,7 +116,7 @@ export async function POST(req:Request){try{
   if(Number(b.data['GST %']||0)>100)throw new HttpError(400,'GST must be between 0 and 100.');
  }
  if(m.role==='mr'){const invalid=validateMRFields(b.kind,b.data,old||undefined);if(invalid)throw new HttpError(403,invalid);}
- const assignedTo=m.role==='admin'?(b.assignedTo!==undefined?b.assignedTo:existing?.assigned_to||''):(existing?.assigned_to||m.email);
+ const assignedTo=b.kind==='Routes'?(existing?.assigned_to||''):m.role==='admin'?(b.assignedTo!==undefined?b.assignedTo:existing?.assigned_to||''):(existing?.assigned_to||m.email);
  let assignee:Member|null=null;
  if(assignedTo){
   assignee=await db().prepare('SELECT * FROM members WHERE email = ?').bind(assignedTo).first<Member>();
@@ -171,6 +191,11 @@ export async function DELETE(req:Request){try{
   if(customers.results.some(r=>stockistIDs(JSON.parse(r.data)).includes(b.id!)))throw new HttpError(409,'This stockist is linked to a medical / clinic. Remove that link before deleting it.');
  }
  if(['Products','Stockists','Gifts','Customers'].includes(existing.kind)){const linked=await db().prepare('SELECT id FROM stock_movements WHERE stockist_id=? OR product_id=? UNION SELECT id FROM benefit_movements WHERE item_id=? OR customer_id=? UNION SELECT id FROM invoices WHERE customer_id=? LIMIT 1').bind(b.id,b.id,b.id,b.id,b.id).first();if(linked)throw new HttpError(409,'This record has stock or visit history and cannot be deleted.');}
+ if(existing.kind==='Districts'){
+  const stocks=(await db().prepare("SELECT data FROM records WHERE kind = 'Stockists'").all<{data:string}>()).results;if(stocks.some(r=>headquartersDistrictIDs(JSON.parse(r.data),[{...existing,data}]).includes(existing.id)))throw new HttpError(409,'This district is covered by a stockist. Remove that coverage before deleting it.');
+  const hqs=(await db().prepare("SELECT id,kind,data FROM records WHERE kind='Headquarters'").all<{id:string;kind:string;data:string}>()).results;
+  if(hqs.some(r=>headquartersDistrictIDs(JSON.parse(r.data),[{...existing,data}]).includes(existing.id)))throw new HttpError(409,'This district is linked to a headquarters. Remove that link before deleting it.');
+ }
  const link=masterLinks[existing.kind];
  if(link){
   const linked=await db().prepare('SELECT id FROM records WHERE json_extract(data,?) = ? AND id <> ? LIMIT 1').bind(`$.${link}`,data.Name,b.id).first();

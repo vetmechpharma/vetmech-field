@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import {APP_NAME} from "../lib/branding";
 import "./globals.css";
 import "./modern.css";
+import "./responsive.css";
 
 export const metadata: Metadata = {
   title: APP_NAME,

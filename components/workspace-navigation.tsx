@@ -4,8 +4,8 @@ import {useEffect, useState} from 'react';
 import {ChevronDown, Users, MapPin, ShoppingBag, Gift, BarChart3, Settings, type LucideIcon} from 'lucide-react';
 
 const groups = [
-  {id: 'team', title: 'Team & attendance', icon: Users, items: ['MR profiles', 'Team', 'Attendance', 'MR types']},
-  {id: 'customers', title: 'Customers & territory', icon: MapPin, items: ['Customers', 'Customer access', 'Districts', 'Headquarters', 'Routes']},
+  {id: 'team', title: 'Team & attendance', icon: Users, items: ['MR profiles', 'Team', 'Attendance']},
+  {id: 'customers', title: 'Customers & territory', icon: MapPin, items: ['Customers', 'Customer access', 'Territory setup']},
   {id: 'field', title: 'Field work', icon: MapPin, items: ['Tour plan', 'Visits', 'Follow-ups', 'MR activity', 'Locations', 'Drafts']},
   {id: 'sales', title: 'Sales & stock', icon: ShoppingBag, items: ['Orders', 'Secondary sales', 'Primary sales', 'Stockists', 'Products', 'Stock balance']},
   {id: 'benefits', title: 'Samples & gifts', icon: Gift, items: ['Samples', 'Gifts']},
