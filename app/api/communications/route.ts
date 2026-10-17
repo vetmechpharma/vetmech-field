@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {admin,member,db,json,failure,sameOrigin,HttpError} from '../../../lib/server';
+import {readJSON,admin,member,db,json,failure,sameOrigin,HttpError} from '../../../lib/server';
 import {communicationConfig,publicConfig,seal,cleanupCommunicationLogs} from '../../../lib/communication-settings';
 import {messageTemplates,templateTokens} from '../../../lib/message-templates';
 import {phoneNumber} from '../../../lib/order-messages';
@@ -7,9 +7,9 @@ import {sendWhatsApp} from '../../../lib/whatsapp';
 import {emailStatement,sendEmail} from '../../../lib/email';
 const email=z.union([z.literal(''),z.string().email().max(254)]);
 const schema=z.object({whatsappEnabled:z.boolean(),whatsappUrl:z.string().max(1000),whatsappKey:z.string().max(4000).default(''),whatsappSession:z.string().trim().min(1).max(100),adminPhone:z.string().max(30),smtpEnabled:z.boolean(),smtpHost:z.string().trim().max(253),smtpPort:z.union([z.literal(465),z.literal(587)]),smtpUser:z.string().max(254),smtpPassword:z.string().max(4000).default(''),smtpFrom:email,adminEmail:email,templates:z.object({order_new:z.string().trim().min(10).max(5000),order_update:z.string().trim().min(10).max(5000),visit_thanks:z.string().trim().min(10).max(5000)})});
-export async function GET(){try{const m=await member();await cleanupCommunicationLogs();const wa=(await db().prepare('SELECT * FROM whatsapp_outbox ORDER BY created DESC LIMIT 500').all<any>()).results.filter(r=>m.role==='admin'||r.mr_email===m.email);const emails=m.role==='admin'?(await db().prepare('SELECT * FROM email_outbox ORDER BY created DESC LIMIT 500').all<any>()).results:[];return json({config:m.role==='admin'?publicConfig(await communicationConfig()):null,whatsapp:wa,emails});}catch(e){return failure(e)}}
+export async function GET(){try{const m=await member();await cleanupCommunicationLogs();const wa=(await (m.role==='admin'?db().prepare('SELECT * FROM whatsapp_outbox ORDER BY created DESC LIMIT 500'):db().prepare('SELECT * FROM whatsapp_outbox WHERE mr_email=? ORDER BY created DESC LIMIT 500').bind(m.email)).all<any>()).results.filter(r=>m.role==='admin'||r.mr_email===m.email);const emails=m.role==='admin'?(await db().prepare('SELECT * FROM email_outbox ORDER BY created DESC LIMIT 500').all<any>()).results:[];return json({config:m.role==='admin'?publicConfig(await communicationConfig()):null,whatsapp:wa,emails});}catch(e){return failure(e)}}
 export async function POST(req:Request){try{
- sameOrigin(req);const m=await admin(),raw=await req.json() as any;
+ sameOrigin(req);const m=await admin(),raw=await readJSON(req) as any;
  if(raw.action==='retry'){if(typeof raw.id!=='string')throw new HttpError(400,'Choose a message.');if(raw.channel==='email')await sendEmail(raw.id);else await sendWhatsApp(raw.id);return json({ok:true});}
  if(raw.action==='test'){
   const c=await communicationConfig(),id='test:'+crypto.randomUUID(),text='VETMECH Field Force MR App — configuration test.';

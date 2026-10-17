@@ -1,14 +1,16 @@
 import {z} from 'zod';
-import {admin,db,json,failure,sameOrigin,notification,HttpError} from '../../../lib/server';
+import {readJSON,admin,db,json,failure,sameOrigin,notification,HttpError} from '../../../lib/server';
 import {passwordHash} from '../../../lib/passwords';
 import {OWNER_EMAIL,type Member} from '../../../lib/permissions';
+import {audit} from '../../../lib/admin-audit';
 const ids=z.array(z.string().min(1).max(100)).max(200).optional();
 const short=z.string().trim().max(100).default('');
 const schema=z.object({route_ids:ids,district_ids:ids,stockist_ids:ids,email:z.string().email().transform(s=>s.toLowerCase().trim()).or(z.literal('')).optional(),username:z.string().trim().toLowerCase().regex(/^[a-z0-9._-]{3,50}$/).optional(),password:z.string().min(1).max(128).or(z.literal('')).optional(),name:z.string().trim().min(2).max(100),territory:short,target:z.number().int().min(0).max(100000000).optional(),status:z.enum(['active','disabled']),mr_type:short,district:short,headquarters:short,route:short,phone:z.string().max(30).default(''),employee_code:short});
 export async function GET(){try{await admin();return json({members:(await db().prepare('SELECT m.*, c.username FROM members m LEFT JOIN credentials c ON c.email=m.email ORDER BY m.role, m.name').all()).results})}catch(e){return failure(e)}}
 export async function POST(req:Request){try{
- sameOrigin(req);await admin();const parsed=schema.safeParse(await req.json());if(!parsed.success)throw new HttpError(400,'Enter a name, valid username, non-empty password.');const b=parsed.data;const email=b.email|| (b.username?b.username+'@mr.vetmech.invalid':'');if(!email)throw new HttpError(400,'Enter an MR username.');if(email===OWNER_EMAIL)throw new HttpError(400,'The owner account cannot be changed here.');
+ sameOrigin(req);const actor=await admin();const parsed=schema.safeParse(await readJSON(req));if(!parsed.success)throw new HttpError(400,'Enter a name, valid username, non-empty password.');const b=parsed.data;const email=b.email|| (b.username?b.username+'@mr.vetmech.invalid':'');if(!email)throw new HttpError(400,'Enter an MR username.');if(email===OWNER_EMAIL)throw new HttpError(400,'The owner account cannot be changed here.');
  const old=await db().prepare('SELECT * FROM members WHERE email = ?').bind(email).first<Member>();
+ if(old&&old.role!=='mr')throw new HttpError(403,'Admin accounts cannot be changed through MR management.');
  const login=await db().prepare('SELECT username FROM credentials WHERE email=?').bind(email).first<{username:string}>();
  if(!login&&(!b.username||!b.password))throw new HttpError(400,'A new MR needs a username and non-empty password.');
  if(b.username){const used=await db().prepare('SELECT email FROM credentials WHERE username=? AND email<>?').bind(b.username,email).first();if(used)throw new HttpError(409,'This username is already in use.');}
@@ -25,5 +27,7 @@ export async function POST(req:Request){try{
  if(b.password||b.status==='disabled')statements.push(db().prepare('DELETE FROM sessions WHERE email=?').bind(email));
  if(old&&old.name!==b.name)statements.push(db().prepare("UPDATE records SET data = json_set(data,'$.Representative',?) WHERE assigned_to = ?").bind(b.name,email));
  if(b.status==='active')statements.push(notification(email,old?'Profile updated':'Welcome to VETMECH Field',old?'Your Admin updated your profile or territory.':'Your MR account is ready. Start with your assigned doctors.','Dashboard'));
+ const {password,...profile}=b;
+ statements.push(audit(actor,old?'MR account updated':'MR account created','Team',email,old?{name:old.name,status:old.status,route_ids:old.route_ids,district_ids:old.district_ids,stockist_ids:old.stockist_ids,username:login?.username}:null,{...profile,passwordChanged:!!password},password?'MR credentials set by Admin':'MR profile / territory change'));
  await db().batch(statements);return json({ok:true})
 }catch(e){return failure(e)}}

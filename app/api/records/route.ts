@@ -9,7 +9,7 @@ import {duplicateRequest,accessRoute} from '../../../lib/customer-access';
 import {periodGuard,assertOpen} from '../../../lib/periods';
 import {idList,validGPS,legacyGPS,gpsString} from '../../../lib/field-rules';
 import {z} from 'zod';
-import {member,db,json,failure,sameOrigin,HttpError,notification} from '../../../lib/server';
+import {readJSON,member,db,json,failure,sameOrigin,HttpError,notification} from '../../../lib/server';
 import {OWNER_EMAIL,kinds,sharedKinds,adminKinds,masterKinds,canRead,canWrite,validateMRFields,type StoredRecord,type Member} from '../../../lib/permissions';
 import {quoteProduct,sampleDelta,masterLinks,memberLinks} from '../../../lib/business';
 import {customerCategory,stockistIDs,validateCustomer} from '../../../lib/customers';
@@ -27,7 +27,7 @@ export async function GET(){try{
 }catch(e){return failure(e)}}
 
 export async function POST(req:Request){try{
- sameOrigin(req);const m=await member();const parsed=schema.safeParse(await req.json());
+ sameOrigin(req);const m=await member();const parsed=schema.safeParse(await readJSON(req));
  if(!parsed.success)throw new HttpError(400,'Invalid record. Check the form and retry.');const b=parsed.data;if(b.kind==='Tour plan')throw new HttpError(400,'Use route tour planning to preserve plan history.');
  if(JSON.stringify(b.data).length>20000)throw new HttpError(400,'This record is too long.');
  if(m.role!=='admin'&&adminKinds.includes(b.kind))throw new HttpError(403,'Only Admin can change these records.');
@@ -56,7 +56,8 @@ export async function POST(req:Request){try{
   if(m.role==='mr'&&existing)throw new HttpError(403,'Only Admin can edit customer details.');
   const route=b.data['Route ID']?await db().prepare("SELECT id,data FROM records WHERE kind='Routes' AND id=?").bind(b.data['Route ID']).first<{id:string;data:string}>():await db().prepare("SELECT id,data FROM records WHERE kind='Routes' AND json_extract(data,'$.Name')=?").bind(b.data.Route||'').first<{id:string;data:string}>();
   if(!route)throw new HttpError(400,'Select the customer route.');
-  const outside=m.role==='mr'&&!idList(m.route_ids).includes(route.id)&&b.data.Route!==m.route;
+  const assignedRoutes=idList(m.route_ids);
+  const outside=m.role==='mr'&&!(assignedRoutes.includes(route.id)||(!assignedRoutes.length&&!!m.route&&JSON.parse(route.data).Name===m.route));
   b.data.Route=JSON.parse(route.data).Name;b.data['Route ID']=route.id;b.data.District=JSON.parse(route.data).District||'';b.data.Headquarters=JSON.parse(route.data).Headquarters||'';const district=await db().prepare("SELECT data FROM records WHERE kind='Districts' AND json_extract(data,'$.Name')=?").bind(b.data.District).first<{data:string}>();b.data.State=district?JSON.parse(district.data).State||'':'';if(m.role==='mr'){delete b.data['Route access'];delete b.data['MR route access'];delete b.data['Blocked MRs'];delete b.data['Outside route MRs'];}
   if(!b.data.Name?.trim())throw new HttpError(400,'Name is required.');const customerError=validateCustomer(b.data,fieldDay);if(customerError)throw new HttpError(400,customerError);if(!outside){const duplicate=await duplicateRequest(m,b.data,b.id);if(duplicate)return duplicate;}
   const invalid=validateCustomer(b.data,new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}));if(invalid)throw new HttpError(400,invalid);
@@ -182,7 +183,7 @@ export async function POST(req:Request){try{
 
 export async function DELETE(req:Request){try{
  sameOrigin(req);const m=await member();if(m.role!=='admin')throw new HttpError(403,'Only Admin can delete records.');
- const b=await req.json() as {id?:string};if(typeof b.id!=='string')throw new HttpError(400,'Choose a record.');
+ const b=await readJSON(req) as {id?:string};if(typeof b.id!=='string')throw new HttpError(400,'Choose a record.');
  const existing=await db().prepare('SELECT * FROM records WHERE id = ?').bind(b.id).first<StoredRecord>();if(!existing)throw new HttpError(404,'Record not found.');const data=JSON.parse(existing.data);if(existing.kind==='Tour plan')throw new HttpError(400,'Cancel the plan instead of deleting its history.');if(data['Invoice ID']||data['Ledger ID'])throw new HttpError(403,'Posted ledger records cannot be deleted individually.');
 
  if(data.Date)await assertOpen(data.Date);if(data.Month&&existing.id.startsWith('monthly-target:'))await assertOpen(data.Month);

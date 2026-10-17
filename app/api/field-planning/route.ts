@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {member,db,json,failure,sameOrigin,HttpError,notification} from '../../../lib/server';
+import {readJSON,member,db,json,failure,sameOrigin,HttpError,notification} from '../../../lib/server';
 import {OWNER_EMAIL,canRead,type Member} from '../../../lib/permissions';
 import {guard,indiaDay,ledgerFailure} from '../../../lib/operations';
 import {periodGuard,assertOpen,stateSQL} from '../../../lib/periods';
@@ -9,7 +9,7 @@ import {validateCustomer} from '../../../lib/customers';
 import {audit} from '../../../lib/admin-audit';
 const validDate=(d:any)=>typeof d==='string'&&/^20\d\d-\d\d-\d\d$/.test(d)&&!isNaN(Date.parse(d))&&new Date(d).toISOString().slice(0,10)===d;
 export async function GET(){try{const m=await member(),all=(await db().prepare("SELECT * FROM workflow_requests WHERE kind IN ('leave','outside_customer','direct_order') ORDER BY created DESC").all<any>()).results.filter(r=>m.role==='admin'||r.mr_email===m.email),routes=(await db().prepare("SELECT id,data FROM records WHERE kind='Routes'").all<any>()).results.map(r=>({id:r.id,...JSON.parse(r.data),assigned:m.role==='admin'||idList(m.route_ids).includes(r.id)})),customers=m.role==='admin'?(await db().prepare("SELECT * FROM records WHERE kind='Customers'").all<any>()).results:[];const districts=(await db().prepare("SELECT id,data FROM records WHERE kind='Districts'").all<any>()).results.map(r=>({id:r.id,kind:'Districts',data:{Name:JSON.parse(r.data).Name,State:JSON.parse(r.data).State||''}}));return json({districts,requests:all.map(r=>{const b=JSON.parse(r.body);return {...r,body:b,matches:r.kind==='outside_customer'&&m.role==='admin'?customers.filter(c=>matchesCustomer(b.submitted,JSON.parse(c.data))).map(c=>({id:c.id,...JSON.parse(c.data)})):[]}}),routes});}catch(e){try{ledgerFailure(e)}catch(error){return failure(error)}}}
-export async function POST(req:Request){try{sameOrigin(req);const m=await member(),b=await req.json() as any,now=new Date().toISOString();
+export async function POST(req:Request){try{sameOrigin(req);const m=await member(),b=await readJSON(req) as any,now=new Date().toISOString();
  if(b.action==='leave'){
  if(m.role!=='mr')throw new HttpError(403,'Leave must be requested by the MR.');if(!validDate(b.from)||!validDate(b.to)||b.from>b.to||b.from<indiaDay()||Date.parse(b.to)-Date.parse(b.from)>90*86400000||typeof b.reason!=='string'||b.reason.trim().length<3)throw new HttpError(400,'Choose today or future dates, up to 91 days, and enter a reason.');
  const id=crypto.randomUUID();await db().batch([guard('version',"NOT EXISTS(SELECT 1 FROM workflow_requests WHERE kind='leave' AND mr_email=? AND status IN ('Pending','Approved') AND json_extract(body,'$.from')<=? AND json_extract(body,'$.to')>=?)",[m.email,b.to,b.from]),db().prepare("INSERT INTO workflow_requests(id,kind,mr_email,record_id,body,status,created) VALUES (?,'leave',?,'',?,'Pending',?)").bind(id,m.email,JSON.stringify({from:b.from,to:b.to,reason:b.reason.trim().slice(0,1000)}),now),notification(OWNER_EMAIL,'Leave approval requested',`${m.name} · ${b.from} to ${b.to}`,'Approvals',id)]);return json({ok:true});

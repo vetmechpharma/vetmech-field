@@ -76,6 +76,15 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  const gift=await post('Gifts',{Name:'Diary','Unit cost':'100','One per customer':'Yes'});
  identity=bob;const ownBob=await post('Customers',{Name:'Bob doctor',Route:'South Tirupur'});
  identity=alice;const own=await post('Customers',{Name:'Alice doctor',Route:'Uthukuli'});
+ // Route authorization must use the stored route, never a conflicting client-supplied name.
+ const forgedRoute=await ok(await records.POST(request({kind:'Customers',data:{Name:'Approval bypass probe',Route:'Uthukuli','Route ID':r2.id}})));
+ assert.equal(forgedRoute.accessRequested,true);
+ assert(!sql.prepare("SELECT id FROM records WHERE kind='Customers' AND json_extract(data,'$.Name')='Approval bypass probe'").get());
+ const pendingRoute=sql.prepare("SELECT body FROM workflow_requests WHERE kind='outside_customer' AND json_extract(body,'$.submitted.Name')='Approval bypass probe'").get();assert.equal(JSON.parse(pendingRoute.body).submitted.Route,'South Tirupur');
+ sql.prepare("DELETE FROM workflow_requests WHERE kind='outside_customer' AND json_extract(body,'$.submitted.Name')='Approval bypass probe'").run();
+ const priority=load(path.join(root,'lib/field-updates.ts')).customerPriority,priorityCustomer={id:'priority',created:'2026-09-15T00:00:00Z',data:{Name:'Priority fixture'}};
+ assert.equal(priority(priorityCustomer,[{customer_id:'priority',kind:'secondary',status:'Delivered',date:'2026-09-20',subtotal:1200000}],[],'2026-10-17').tier,'Top buyer');
+ assert.equal(priority({...priorityCustomer,created:'2026-09-30T20:00:00Z'},[],[],'2026-10-17').tier,'New customer');
  let rows=(await ok(await records.GET())).records;assert(rows.some(r=>r.id===shared.id));assert(rows.some(r=>r.id===assigned.id));assert(rows.some(r=>r.id===own.id));assert(!rows.some(r=>r.id===ownBob.id));assert(!rows.some(r=>r.id==='legacy'));assert(!('PTS' in rows.find(r=>r.id===product.id).data));
  await ok(await records.POST(request({kind:'Customers',id:own.id,data:{Name:'Changed',Route:'Uthukuli'}})),403);
  await ok(await records.DELETE(request({id:own.id},'DELETE')),403);
@@ -244,7 +253,11 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  await ok(await records.POST(request({kind:'Customers',data:{Name:'Anonymous'}})),401);
  await ok(await login.POST(request({username:'bob',password:'wrong-password'})),401);
  await ok(await login.POST(request({username:'bob',password:'Test-only-password-456'},'POST','https://evil.test')),403);
+ await ok(await login.POST(new Request('https://app.test/api',{method:'POST',headers:{'content-type':'application/json','sec-fetch-site':'cross-site'},body:JSON.stringify({username:'bob',password:'Test-only-password-456'})})),403);
+ const legacySalt='00112233445566778899aabbccddeeff',legacyHash='pbkdf2-sha512$100000$'+legacySalt+'$'+require('node:crypto').pbkdf2Sync('Test-only-password-456',Buffer.from(legacySalt,'hex'),100000,32,'sha512').toString('hex');
+ sql.prepare('UPDATE credentials SET password_hash=? WHERE username=?').run(legacyHash,'bob');
  let signed=await login.POST(request({username:'bob',password:'Test-only-password-456'}));await ok(signed);let cookie=signed.headers.get('set-cookie');assert(cookie.includes('HttpOnly')&&cookie.includes('Secure')&&cookie.includes('SameSite=Strict'));
+ assert(sql.prepare('SELECT password_hash FROM credentials WHERE username=?').get('bob').password_hash.startsWith('pbkdf2-sha512$220000$'));
  browserCookie=cookie.split(';')[0];assert.equal((await ok(await session.GET())).member.email,bob.email);await ok(await team.GET(),403);
  await ok(await testMR.POST(request({enabled:true})),410);
  await ok(await password.POST(request({currentPassword:'wrong',newPassword:'New-test-password-789'})),400);
@@ -505,6 +518,19 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  const priceExtra=load(path.join(root,'lib/field-rules.ts')).priceLine;assert.equal(priceExtra(extraSchemeProduct,'extra',10,'4',false).free,4);assert.equal(priceExtra(extraSchemeProduct,'extra',20,'20',false).free,6);assert.equal(priceExtra(extraSchemeProduct,'extra',10,'none',false).free,0);
  await ok(await records.POST(request({kind:'Products',data:{...extraSchemeProduct,Name:'Invalid extra scheme','Scheme 4 paid':'0'}})),400);
  console.log('PASS: additional product schemes beyond three validate and calculate correctly; no scheme remains available.');
+ // Newer records belonging to other MRs must not crowd this MR out of limited lists.
+ const otherInvoice=sql.prepare('INSERT INTO invoices(id,kind,stockist_id,customer_id,mr_email,number,date,items,subtotal,total,visit_id,notes,created,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+ const otherMessage=sql.prepare('INSERT INTO whatsapp_outbox(id,visit_id,mr_email,phone,message,status,created) VALUES (?,?,?,?,?,?,?)');
+ for(let i=0;i<1001;i++){otherInvoice.run('scope-invoice-'+i,'secondary',s1.id,ownBob.id,bob.email,'SCOPE-'+i,fieldDate,'[]',0,0,'','','2099-01-01T00:00:00Z','Cancelled');otherMessage.run('scope-message-'+i,'scope-message-'+i,bob.email,'919876543210','synthetic scope test','sent','2099-01-01T00:00:00Z');}
+ identity=alice;const scopedSales=await ok(await commerce.GET());assert(scopedSales.invoices.some(i=>i.id===order.id));assert(!scopedSales.invoices.some(i=>i.id.startsWith('scope-invoice-')));
+ const scopedMessages=await ok(await whatsapp.GET());assert(scopedMessages.messages.length>0);assert(scopedMessages.messages.every(x=>x.mr_email===alice.email));
+ sql.prepare("DELETE FROM invoices WHERE id LIKE 'scope-invoice-%'").run();sql.prepare("DELETE FROM whatsapp_outbox WHERE id LIKE 'scope-message-%'").run();
+ identity=owner;
+ sql.prepare('UPDATE members SET role=? WHERE email=?').run('admin',bob.email);
+ await ok(await team.POST(request({email:bob.email,name:'Other admin',password:'x',status:'active'})),403);
+ assert.equal(sql.prepare('SELECT role FROM members WHERE email=?').get(bob.email).role,'admin');sql.prepare('UPDATE members SET role=? WHERE email=?').run('mr',bob.email);
+ const accountAudit=sql.prepare("SELECT after_data FROM admin_audit WHERE entity_kind='Team'").all();assert(accountAudit.length>0);assert(accountAudit.every(r=>!r.after_data.includes('Test-only-password')&&!r.after_data.includes('password_hash')));
+ console.log('PASS: scope before list limits, forged route approval bypass blocked, legacy password upgrade, cross-site rejection and credential-free account audit.');
  if(process.env.MONGO_TEST_MODE!=='model'){
   const native=load(path.join(root,'lib/mongo/database.ts')).mongoDatabase;
   const {availableGuard}=load(path.join(root,'lib/order-stock.ts'));

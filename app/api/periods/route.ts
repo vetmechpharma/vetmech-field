@@ -1,13 +1,13 @@
 import {closingChecklist} from '../../../lib/closing-checklist';
 import {audit} from '../../../lib/admin-audit';
-import {admin,db,json,failure,sameOrigin,HttpError} from '../../../lib/server';
+import {readJSON,admin,db,json,failure,sameOrigin,HttpError} from '../../../lib/server';
 import {reportingData,makeReport,stateSQL} from '../../../lib/periods';
 import {guard,indiaDay} from '../../../lib/operations';
 import {digest} from '../../../lib/passwords';
 import type {Member} from '../../../lib/permissions';
 const valid=(m:unknown)=>typeof m==='string'&&/^20\d{2}-(0[1-9]|1[0-2])$/.test(m);
 export async function GET(){try{await admin();return json({periods:(await db().prepare('SELECT * FROM period_locks ORDER BY month DESC').all()).results,events:(await db().prepare('SELECT * FROM period_events ORDER BY created DESC LIMIT 100').all()).results})}catch(e){return failure(e)}}
-export async function POST(req:Request){try{sameOrigin(req);const a=await admin(),b=await req.json() as any;if(!valid(b.month))throw new HttpError(400,'Choose a month.');const now=new Date().toISOString();
+export async function POST(req:Request){try{sameOrigin(req);const a=await admin(),b=await readJSON(req) as any;if(!valid(b.month))throw new HttpError(400,'Choose a month.');const now=new Date().toISOString();
  if(b.action==='reopen'){if(typeof b.reason!=='string'||b.reason.trim().length<5)throw new HttpError(400,'Record a reason for reopening.');if(await db().prepare('SELECT month FROM period_locks WHERE month>? AND closed=1').bind(b.month).first())throw new HttpError(409,'Reopen later closed months first to protect their opening stock.');await db().batch([audit(a,'Month reopened','Reporting period',b.month,{closed:true},{closed:false},b.reason),guard('version','EXISTS(SELECT 1 FROM period_locks WHERE month=? AND closed=1)',[b.month]),db().prepare('UPDATE period_locks SET closed=0,updated=?,admin_email=?,reason=? WHERE month=?').bind(now,a.email,b.reason,b.month),db().prepare('INSERT INTO period_events VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(),b.month,'Reopened',a.email,b.reason,now)]);return json({ok:true})}
  if(!['review','close'].includes(b.action))throw new HttpError(400,'Choose Review, Close or Reopen.');if(b.month>=indiaDay().slice(0,7))throw new HttpError(400,'Only completed calendar months can be closed.');if(await db().prepare('SELECT month FROM period_locks WHERE month=? AND closed=1').bind(b.month).first())throw new HttpError(409,'This month is already closed.');
  const stamp=(await db().prepare(stateSQL).first<{stamp:string}>())!.stamp,data=await reportingData(),reps=(await db().prepare("SELECT * FROM members WHERE role='mr'").all<Member>()).results;

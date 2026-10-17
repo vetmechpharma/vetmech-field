@@ -1,4 +1,4 @@
-import {member,db,json,failure,sameOrigin,HttpError,notification} from '../../../lib/server';
+import {readJSON,member,db,json,failure,sameOrigin,HttpError,notification} from '../../../lib/server';
 import {canRead,OWNER_EMAIL,type Member} from '../../../lib/permissions';
 import {guard,indiaDay,ledgerFailure} from '../../../lib/operations';
 import {assertOpen,periodGuard,stateSQL} from '../../../lib/periods';
@@ -8,7 +8,7 @@ import {customerStatuses,eligibleForPlan,planState,customerKey,type PlanRow} fro
 const validDate=(d:any)=>typeof d==='string'&&/^20\d\d-\d\d-\d\d$/.test(d)&&!isNaN(Date.parse(d))&&new Date(d).toISOString().slice(0,10)===d;
 async function snapshot(){const raw=(await db().prepare('SELECT * FROM records').all<any>()).results;return {raw,rows:raw.map(r=>({...r,data:JSON.parse(r.data)})) as PlanRow[]};}
 export async function GET(){try{const m=await member(),{raw,rows}=await snapshot(),visible=raw.filter(r=>canRead(m,r)),ids=new Set(visible.map(r=>r.id));const requests=(await db().prepare("SELECT * FROM workflow_requests WHERE kind='customer_status' ORDER BY created DESC").all<any>()).results.filter(r=>m.role==='admin'||r.mr_email===m.email);return json({plans:rows.filter(r=>r.kind==='Tour plan'&&ids.has(r.id)).map(p=>({...p,state:planState(p,rows,indiaDay())})),requests:requests.map(r=>({...r,body:JSON.parse(r.body)}))});}catch(e){return failure(e)}}
-export async function POST(req:Request){try{sameOrigin(req);const m=await member(),b=await req.json() as any,now=new Date().toISOString(),today=indiaDay(),stamp=(await db().prepare(stateSQL).first<{stamp:string}>())!.stamp,{raw,rows}=await snapshot(),statements=[guard('version',`(${stateSQL})=?`,[stamp])];
+export async function POST(req:Request){try{sameOrigin(req);const m=await member(),b=await readJSON(req) as any,now=new Date().toISOString(),today=indiaDay(),stamp=(await db().prepare(stateSQL).first<{stamp:string}>())!.stamp,{raw,rows}=await snapshot(),statements=[guard('version',`(${stateSQL})=?`,[stamp])];
  const write=(r:any,data:any)=>statements.push(db().prepare('UPDATE records SET data=? WHERE id=?').bind(JSON.stringify(data),r.id));
  if(b.action==='plan'||b.action==='reschedule'||b.action==='cancel'){
  let owner=m;if(m.role==='admin'){owner=await db().prepare("SELECT * FROM members WHERE email=? AND role='mr' AND status='active'").bind(b.email||'').first<Member>() as Member;if(!owner)throw new HttpError(400,'Select an active MR.');}

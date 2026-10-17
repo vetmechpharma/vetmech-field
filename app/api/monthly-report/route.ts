@@ -1,7 +1,7 @@
 import {mrReport} from '../../../lib/benefit-visibility';
 import {periodGuard,assertOpen} from '../../../lib/periods';
 import {routeInsights,shiftMonth} from '../../../lib/route-insights';
-import {member,admin,db,json,failure,HttpError,sameOrigin} from '../../../lib/server';
+import {readJSON,member,admin,db,json,failure,HttpError,sameOrigin} from '../../../lib/server';
 import {buildReport,totals,type Row} from '../../../lib/monthly-report';
 import type {Member} from '../../../lib/permissions';
 const validMonth=(m:string)=>typeof m==='string'&&/^20\d{2}-(0[1-9]|1[0-2])$/.test(m);
@@ -16,7 +16,7 @@ export async function GET(req:Request){try{const viewer=await member(),q=new URL
  const compare=q.get('compare')||shiftMonth(month,-1),inactive=Number(q.get('inactive')||3);if(!validMonth(compare)||![1,2,3,6,12].includes(inactive))throw new HttpError(400,'Choose valid comparison settings.');const report=buildReport(mr,month,records,invoices,sm.results,bm.results,cm.results,viewer.role==='admin');report.tables.push(...routeInsights(mr,month,compare,inactive,records,invoices).tables);return json(viewer.role==='admin'?report:mrReport(report));
 }catch(e){return failure(e)}}
 export async function POST(req:Request){try{
- sameOrigin(req);const a=await admin(),b=await req.json() as any;
+ sameOrigin(req);const a=await admin(),b=await readJSON(req) as any;
  if(!b||!validMonth(b.month))throw new HttpError(400,'Choose a valid month.');
  let targets:{email:string;target:number}[];
  if(Array.isArray(b.targets)){

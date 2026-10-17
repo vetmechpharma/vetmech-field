@@ -4,14 +4,14 @@ import {renderMessage} from '../../../../lib/message-templates';
 import {emailStatement} from '../../../../lib/email';
 import {periodGuard} from '../../../../lib/periods';
 import {z} from 'zod';
-import {member,db,json,failure,sameOrigin,HttpError} from '../../../../lib/server';
+import {readJSON,member,db,json,failure,sameOrigin,HttpError} from '../../../../lib/server';
 import {record,customer,requireGPS,activeDay,issueStatements,ledgerFailure,indiaDay,guard} from '../../../../lib/operations';
 import {gpsString} from '../../../../lib/field-rules';
 import {sendWhatsApp} from '../../../../lib/whatsapp';
 const item=z.object({itemId:z.string(),qty:z.number().int().min(1).max(10000),commitmentId:z.string().optional()});
 const schema=z.object({id:z.string(),gps:z.unknown(),locationName:z.string().max(300).default(''),locationAddress:z.string().max(1000).default(''),gifts:z.array(item).max(10).default([]),samples:z.array(item).max(10).default([]),notes:z.string().max(2000).default('')});
 export async function POST(req:Request){try{
- sameOrigin(req);const m=await member();if(m.role!=='mr')throw new HttpError(403,'The MR must close their own visit.');const parsed=schema.safeParse(await req.json());if(!parsed.success)throw new HttpError(400,'Check the visit closing details.');const b=parsed.data;
+ sameOrigin(req);const m=await member();if(m.role!=='mr')throw new HttpError(403,'The MR must close their own visit.');const parsed=schema.safeParse(await readJSON(req));if(!parsed.success)throw new HttpError(400,'Check the visit closing details.');const b=parsed.data;
  const visit=await record(b.id,'Visits');if(visit.assigned_to!==m.email)throw new HttpError(403,'This visit belongs to another MR.');
  if(visit.details.Status==='Closed')return json({ok:true,alreadyClosed:true});
  if(visit.details.Date!==indiaDay())throw new HttpError(400,'Close the visit on the same day. Contact Admin for a correction.');
