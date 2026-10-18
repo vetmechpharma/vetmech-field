@@ -85,7 +85,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  const priority=load(path.join(root,'lib/field-updates.ts')).customerPriority,priorityCustomer={id:'priority',created:'2026-09-15T00:00:00Z',data:{Name:'Priority fixture'}};
  assert.equal(priority(priorityCustomer,[{customer_id:'priority',kind:'secondary',status:'Delivered',date:'2026-09-20',subtotal:1200000}],[],'2026-10-17').tier,'Top buyer');
  assert.equal(priority({...priorityCustomer,created:'2026-09-30T20:00:00Z'},[],[],'2026-10-17').tier,'New customer');
- let rows=(await ok(await records.GET())).records;assert(rows.some(r=>r.id===shared.id));assert(rows.some(r=>r.id===assigned.id));assert(rows.some(r=>r.id===own.id));assert(!rows.some(r=>r.id===ownBob.id));assert(!rows.some(r=>r.id==='legacy'));assert(!('PTS' in rows.find(r=>r.id===product.id).data));
+ let rows=(await ok(await records.GET())).records;assert(rows.some(r=>r.id===shared.id));assert(rows.some(r=>r.id===assigned.id));assert(rows.some(r=>r.id===own.id));assert(!rows.some(r=>r.id===ownBob.id));assert(!rows.some(r=>r.id==='legacy'));assert.equal(rows.find(r=>r.id===product.id).data.PTS,'90');assert(!('Sample cost' in rows.find(r=>r.id===product.id).data));
  await ok(await records.POST(request({kind:'Customers',id:own.id,data:{Name:'Changed',Route:'Uthukuli'}})),403);
  await ok(await records.DELETE(request({id:own.id},'DELETE')),403);
  await ok(await records.POST(request({kind:'Customers',data:{Name:'Wrong route',Route:'South Tirupur'}})));
@@ -124,7 +124,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  identity=alice;assert.equal(qty(s1.id,product.id),48);assert.equal(qty(s1.id,otherProduct.id),8);
  const orderStored=sql.prepare('SELECT * FROM invoices WHERE id=?').get(order.id);assert.equal(orderStored.total,140000);assert.equal(JSON.parse(orderStored.items)[1].rate,7000);
  await ok(await commerce.POST(request(order)));assert.equal(qty(s1.id,product.id),48);
- const failed=invoice('secondary',s1.id,[{productId:product.id,qty:1,scheme:'none'},{productId:otherProduct.id,qty:999,scheme:'none'}],{customerId:shared.id});await ok(await commerce.POST(request(failed)),409);assert.equal(qty(s1.id,product.id),48);assert(!sql.prepare('SELECT id FROM invoices WHERE id=?').get(failed.id));
+ const failed=invoice('secondary',s1.id,[{productId:product.id,qty:1,scheme:'none'},{productId:'missing-product',qty:999,scheme:'none'}],{customerId:shared.id});await ok(await commerce.POST(request(failed)),400);assert.equal(qty(s1.id,product.id),48);assert(!sql.prepare('SELECT id FROM invoices WHERE id=?').get(failed.id));
  await ok(await records.POST(request({kind:'Orders',data:{Date:fieldDate}})),400);
  identity=owner;
  const allocate=(kind,itemId,qty,unitCost,mrEmail=alice.email)=>({id:crypto.randomUUID(),kind,movement:'allocate',itemId,qty,unitCost,mrEmail});
@@ -340,7 +340,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  const invoiceCount=sql.prepare('SELECT COUNT(*) AS n FROM invoices').get().n;
  await ok(await communications.GET());assert(!sql.prepare("SELECT id FROM whatsapp_outbox WHERE id='expired-wa'").get());assert(!sql.prepare("SELECT id FROM email_outbox WHERE id='expired-email'").get());assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM invoices').get().n,invoiceCount);
  const stockData=await ok(await statement.GET(new Request('https://example.test/api/stock-statement?from=2020-01-01&to=2099-12-31')));
- assert(stockData.summary.length);for(const row of stockData.summary){assert.equal(row.opening+row.received-row.issued+row.returned,row.closing);assert.equal(row.physical-row.reserved,row.available);}
+ assert(stockData.summary.length);for(const row of stockData.summary){assert.equal(row.opening+row.received-row.issued+row.returned,row.closing);assert.equal(Math.max(0,row.physical-row.expired-row.reserved),row.available);}
  const activeMR=sql.prepare("SELECT * FROM members WHERE role='mr' AND status='active' LIMIT 1").get();identity={id:activeMR.user_id,email:activeMR.email};
  assert.equal((await ok(await communications.GET())).config,null);
  await ok(await communications.POST(request({action:'save',config})),403);
@@ -620,16 +620,64 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  }finally{global.fetch=beforeMessageFetch;identity=owner;await ok(await communications.POST(request({action:'save',config:{...newConfig,whatsappEnabled:false}})));}
  console.log('PASS: new gateway payload/auth/idempotency/status checks; quantity-only customer/Admin templates; mandatory approval; scoped review; stockist forwarding and MR notification; no stockist completion; Admin company completion; saved rates; stale/duplicate actions; all multipart parts; month locks; visit-close once; 30-day log receipt retention. No external sends.');
 
+ // Product-level ordering is independent of batch availability. Only confirmed supply consumes stock.
+ identity=owner;
+ const bulkProduct=await post('Products',{Name:'ZEBUCAL LIQ test',Pack:'1 litre',MRP:'200',PTR:'100',PTS:'75','Sample cost':'4','GST %':'5'});
+ const yesterday=new Date(Date.parse(fieldDate+'T00:00:00Z')-86400000).toISOString().slice(0,10);
+ const expiredReceipt=(source)=>({...invoice(source==='company-stock'?'company_receipt':'primary',source,[{productId:bulkProduct.id,qty:5}]),date:yesterday,lines:[{productId:bulkProduct.id,qty:5,scheme:'none',batch:'EXPIRED',expiry:yesterday}]});
+ await ok(await commerce.POST(request(expiredReceipt(s1.id))));
+ await ok(await commerce.POST(request(expiredReceipt('company-stock'))));
+ identity=alice;
+ const productReference=(await ok(await records.GET())).records.find(r=>r.id===bulkProduct.id).data;
+ assert.equal(productReference.PTS,'75');assert.equal(productReference.PTR,'100');assert(!('Sample cost' in productReference));
+ const bulkAgency=invoice('secondary',s1.id,[{productId:bulkProduct.id,qty:20}],{customerId:messageCustomer.id});
+ await ok(await commerce.POST(request(bulkAgency)));
+ let bulkView=(await ok(await commerce.GET())).stock.find(b=>b.stockist_id===s1.id&&b.product_id===bulkProduct.id);
+ assert.equal(bulkView.quantity,5);assert.equal(bulkView.expired,5);assert.equal(bulkView.reserved,20);assert.equal(bulkView.available,0);assert.equal(bulkView.shortage,20);
+ assert(!JSON.parse(sql.prepare('SELECT items FROM invoices WHERE id=?').get(bulkAgency.id).items)[0].allocations);
+ identity=owner;await ok(await commerce.PATCH(request({id:bulkAgency.id,revision:1,requestId:crypto.randomUUID(),action:'approveOrder'})));
+ assert.equal(sql.prepare('SELECT accepted FROM invoices WHERE id=?').get(bulkAgency.id).accepted,1);assert.equal(qty(s1.id,bulkProduct.id),5);
+ identity=alice;
+ const bulkCompany=invoice('secondary','company-stock',[{productId:bulkProduct.id,qty:100,proposedRate:80}],{customerId:messageCustomer.id});
+ assert((await ok(await commerce.POST(request(bulkCompany)))).pendingApproval);
+ identity=owner;await ok(await commerce.POST(request({action:'approveDirect',requestId:bulkCompany.id})));
+ assert.equal(JSON.parse(sql.prepare('SELECT items FROM invoices WHERE id=?').get(bulkCompany.id).items)[0].rate,8000);
+ const completeBulk={id:bulkCompany.id,revision:1,requestId:crypto.randomUUID(),action:'status',status:'Delivered'};
+ const noSupply=await ok(await commerce.PATCH(request(completeBulk)),409);assert(noSupply.error.includes('Cannot complete supply'));assert.equal(qty('company-stock',bulkProduct.id),5);assert.equal(sql.prepare('SELECT status FROM invoices WHERE id=?').get(bulkCompany.id).status,'Placed');
+ // A partial replenishment is accepted even while demand exceeds available stock.
+ await ok(await commerce.POST(request(invoice('company_receipt','company-stock',[{productId:bulkProduct.id,qty:30}]))));
+ bulkView=(await ok(await commerce.GET())).stock.find(b=>b.stockist_id==='company-stock'&&b.product_id===bulkProduct.id);
+ assert.equal(bulkView.quantity,35);assert.equal(bulkView.shortage,70);assert.equal(bulkView.available,0);
+ const shortStatement=await ok(await statement.GET(new Request('https://example.test/api/stock-statement?from=2020-01-01&to=2099-12-31')));
+ const shortRow=shortStatement.summary.find(b=>b.stockistId==='company-stock'&&b.productId===bulkProduct.id);assert.equal(shortRow.available,0);assert.equal(shortRow.shortage,70);
+ await ok(await commerce.POST(request(invoice('company_receipt','company-stock',[{productId:bulkProduct.id,qty:70}]))));
+ // Another order is allowed to await replenishment; Admin chooses which supply to complete first.
+ identity=alice;const waiting=invoice('secondary','company-stock',[{productId:bulkProduct.id,qty:10}],{customerId:messageCustomer.id});await ok(await commerce.POST(request(waiting)));
+ identity=owner;await ok(await commerce.PATCH(request(completeBulk)));assert.equal(qty('company-stock',bulkProduct.id),5);assert.equal(qty(s1.id,bulkProduct.id),5);
+ const completedItems=JSON.parse(sql.prepare('SELECT items FROM invoices WHERE id=?').get(bulkCompany.id).items);assert(completedItems[0].allocations.length);assert(completedItems[0].allocations.every(a=>!a.key.includes('EXPIRED')));
+ await ok(await commerce.PATCH(request(completeBulk)));assert.equal(qty('company-stock',bulkProduct.id),5);
+ await ok(await commerce.PATCH(request({id:waiting.id,revision:1,requestId:crypto.randomUUID(),action:'approveOrder'})));
+ const completeWaiting={id:waiting.id,revision:2,requestId:crypto.randomUUID(),action:'status',status:'Delivered'};await ok(await commerce.PATCH(request(completeWaiting)),409);
+ // An entirely absent inventory row still appears as product demand, rather than disappearing from stock views.
+ const zeroProduct=await post('Products',{Name:'Unstocked bulk product',Pack:'Box',PTR:'50',PTS:'40'});
+ identity=alice;const zeroOrder=invoice('secondary',s1.id,[{productId:zeroProduct.id,qty:12}],{customerId:messageCustomer.id});await ok(await commerce.POST(request(zeroOrder)));
+ let zeroRow=(await ok(await commerce.GET())).stock.find(b=>b.stockist_id===s1.id&&b.product_id===zeroProduct.id);assert.equal(zeroRow.quantity,0);assert.equal(zeroRow.shortage,12);
+ identity=owner;await ok(await commerce.PATCH(request({id:zeroOrder.id,revision:1,requestId:crypto.randomUUID(),action:'approveOrder'})));
+ const zeroHub=(await ok(await hub.GET(hubURL()))).stock.find(b=>b.stockist_id===s1.id&&b.product_id===zeroProduct.id);assert.equal(zeroHub.shortage,12);
+ const zeroStatement=(await ok(await statement.GET(new Request('https://example.test/api/stock-statement?from=2020-01-01&to=2099-12-31')))).summary.find(b=>b.stockistId===s1.id&&b.productId===zeroProduct.id);assert.equal(zeroStatement.shortage,12);
+ await ok(await commerce.PATCH(request({id:zeroOrder.id,revision:2,requestId:crypto.randomUUID(),action:'status',status:'Cancelled',reason:'Customer withdrew request'})));assert(!sql.prepare('SELECT id FROM stock_reservations WHERE order_id=?').get(zeroOrder.id));
+ console.log('PASS: expired/zero/insufficient stock does not block product orders or Admin approvals; PTS/PTR visible with costs private; company special rate review; partial replenishment; truthful shortages; company completion alone enforces unexpired stock, idempotency and source isolation.');
+
  if(process.env.MONGO_TEST_MODE!=='model'){
   const native=load(path.join(root,'lib/mongo/database.ts')).mongoDatabase;
-  const {availableGuard}=load(path.join(root,'lib/order-stock.ts'));
+  const {physicalStockGuard}=load(path.join(root,'lib/order-stock.ts'));
   await native.prepare('INSERT INTO stock_balances(id,stockist_id,product_id,quantity) VALUES (?,?,?,?)').bind('race|p','race','p',10).run();
-  const reserve=(id)=>native.batch([native.prepare('INSERT INTO stock_reservations(id,order_id,stockist_id,product_id,quantity) VALUES (?,?,?,?,?)').bind(id,id,'race','p',7),availableGuard('race','p')]);
+  const reserve=(id)=>native.batch([native.prepare('UPDATE stock_balances SET quantity=quantity-? WHERE stockist_id=? AND product_id=?').bind(7,'race','p'),native.prepare('INSERT INTO stock_movements(id,invoice_id,stockist_id,product_id,quantity,created) VALUES (?,?,?,?,?,?)').bind(id,id,'race','p',-7,new Date().toISOString()),physicalStockGuard('race','p')]);
   const outcomes=await Promise.allSettled([reserve('race-a'),reserve('race-b')]);
   assert.equal(outcomes.filter(x=>x.status==='fulfilled').length,1);
-  assert.equal(await mongo.collection('stock_reservations').countDocuments({stockist_id:'race'}),1);
-  assert.equal((await mongo.collection('stock_balances').findOne({id:'race|p'})).quantity,10);
-  console.log('PASS: real replica-set concurrent stock reservations prevent overselling and roll back the losing order.');
+  assert.equal(await mongo.collection('stock_movements').countDocuments({stockist_id:'race'}),1);
+  assert.equal((await mongo.collection('stock_balances').findOne({id:'race|p'})).quantity,3);
+  console.log('PASS: real replica-set concurrent physical stock deductions prevent oversupply and roll back the losing completion.');
  }
 
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(stopMongo);

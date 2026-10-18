@@ -11,6 +11,7 @@ async function condition(c:Context,s:string,a:any[]):Promise<boolean>{
  if(s.startsWith("NOT EXISTS(SELECT 1 FROM workflow_requests WHERE kind='leave'"))return !(await rows(c,'workflow_requests',{kind:'leave',mr_email:a[0],status:{$in:['Pending','Approved']}})).some(r=>{const b=JSON.parse(r.body);return b.from<=a[1]&&b.to>=a[2]});
  if(s.startsWith("NOT EXISTS(SELECT 1 FROM workflow_requests WHERE kind='direct_order'"))return !(await rows(c,'workflow_requests',{kind:'direct_order',status:'Pending'})).some(r=>JSON.parse(r.body).input.date.slice(0,7)<=a[0]);
  if(s.startsWith('(SELECT json_array('))return await stamp(c)===a[0];
+ if(s==='COALESCE((SELECT quantity FROM stock_balances WHERE stockist_id=? AND product_id=?),0)>=0')return ((await one(c,'stock_balances',{stockist_id:a[0],product_id:a[1]}))?.quantity||0)>=0;
  if(s.startsWith('COALESCE((SELECT quantity FROM stock_balances'))return ((await one(c,'stock_balances',{stockist_id:a[0],product_id:a[1]}))?.quantity||0)>=await sum(c,'stock_reservations',{stockist_id:a[2],product_id:a[3]});
  if(s.startsWith('NOT EXISTS(SELECT 1 FROM benefit_balances b JOIN')){const m=await one(c,'benefit_movements',{id:a[0]});if(!m)return true;const b=await one(c,'benefit_balances',{id:`${m.kind}|${m.mr_email}|${m.item_id}`});return !b||b.quantity>=0&&b.value>=0;}
  if(s.startsWith('NOT(COALESCE(')){const r=await one(c,'records',{id:a[0]});return !(String(data(r)['One per customer']??'Yes')==='Yes'&&await exists(c,'benefit_movements',{kind:'gift',movement:'issue',item_id:a[1],customer_id:a[2]}));}

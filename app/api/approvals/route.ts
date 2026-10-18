@@ -1,9 +1,11 @@
+import {stockAvailability} from '../../../lib/stock-availability';
+import {batchInventory} from '../../../lib/batch-stock';
 import {audit} from '../../../lib/admin-audit';
 import {stateSQL} from '../../../lib/periods';
 import {digest} from '../../../lib/passwords';
 import {readJSON,member,admin,db,json,failure,HttpError,sameOrigin,notification} from '../../../lib/server';
 import {idList} from '../../../lib/field-rules';
-import {guard} from '../../../lib/operations';
+import {guard,indiaDay} from '../../../lib/operations';
 import type {Member} from '../../../lib/permissions';
 export async function GET(){try{
  const m=await member(),stamp=(await db().prepare(stateSQL).first<{stamp:string}>())!.stamp;
@@ -11,7 +13,11 @@ export async function GET(){try{
  const records=m.role==='admin'?(await db().prepare("SELECT id,data FROM records WHERE kind IN ('Customers','Routes','Products','Stockists')").all<any>()).results.map(r=>({...r,data:JSON.parse(r.data)})):[];
  const orders=(await (m.role==='admin'?db().prepare("SELECT * FROM invoices WHERE kind='secondary'"):db().prepare("SELECT * FROM invoices WHERE kind='secondary' AND mr_email=?").bind(m.email)).all<any>()).results;
  const newOrders=orders.filter(o=>o.status==='Placed'&&!o.accepted).map(o=>({id:'approval:'+o.id,kind:'order_approval',status:'Pending',mr_email:o.mr_email,record_id:o.id,created:o.created,reason:'',body:JSON.stringify({revision:o.revision,number:o.number})}));
- const stock=m.role==='admin'?(await db().prepare('SELECT b.*,COALESCE((SELECT SUM(quantity) FROM stock_reservations r WHERE r.stockist_id=b.stockist_id AND r.product_id=b.product_id),0) AS reserved FROM stock_balances b').all<any>()).results:[];
+ let stock:any[]=[];
+ if(m.role==='admin'){
+  const [balances,reservations,batchInvoices]=await Promise.all([db().prepare('SELECT * FROM stock_balances').all<any>(),db().prepare('SELECT * FROM stock_reservations').all<any>(),db().prepare('SELECT * FROM invoices').all<any>()]);
+  stock=stockAvailability(balances.results,reservations.results,batchInventory(batchInvoices.results.map(i=>({...i,items:JSON.parse(i.items)})),balances.results),indiaDay());
+ }
  if((await db().prepare(stateSQL).first<{stamp:string}>())!.stamp!==stamp)throw new HttpError(409,'Data changed. Refresh approvals.');
  return json({stock,hash:await digest(stamp),orders,requests:[...newOrders,...requests.map(r=>m.role==='admin'?r:{id:r.id,kind:r.kind,status:r.status,created:r.created,reason:r.reason,body:r.kind==='order_edit'?r.body:JSON.stringify({submitted:{Name:JSON.parse(r.body).submitted?.Name}})})],records});
 }catch(e){return failure(e)}}

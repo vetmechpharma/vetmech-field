@@ -31,17 +31,21 @@ Use **Send test to saved Admin contact** when ready. This button sends a real me
 | Cancellation / rejection | Cancellation message | Cancellation only if the stockist order had already been approved | Cancelled |
 | MR closes a visit | Customer thank-you with linked orders, including pending direct-pricing proposals | None | Visit closed |
 
-Admin can approve new orders in **Approvals** or **Orders**. Direct-pricing proposals appear in both areas; approving the proposal also approves the company order, so a second approval is unnecessary. Approval rechecks stock and current MR/customer access. Historical delivered stockist orders remain intact and appear as **Previously supplied**.
+Admin can approve new orders in **Approvals** or **Orders**. Direct-pricing proposals appear in both areas; approving the proposal also approves the company order, so a second approval is unnecessary. Approval rechecks current MR/customer access. Orders and approvals use product quantities and are allowed when stock is unavailable or expired; batch allocation occurs only on confirmed company supply. Historical delivered stockist orders remain intact and appear as **Previously supplied**.
 
 Only Admin can complete an approved company order. The server rejects stockist completion and MR approval/completion, even if called outside the web interface. MRs can edit an unapproved order within its open month. Edits after approval require Admin review; original product rates remain unless Admin explicitly approves repricing. Month locks still block order creation, editing, cancellation, approval and company completion.
 
 ## Stock and reports
 
-Placing an order reserves units. Custom company-pricing proposals reserve units only when approved. Approval and forwarding do not deduct physical stock. **Forwarded stockist orders remain reserved** because forwarding does not confirm supply; there is no new stockist Completed action.
+Placing an order records requested/reserved units at product level, including demand awaiting replenishment. No batch is required in the MR order form. Stock screens show batch/expiry details, available unexpired quantities, and shortages separately. Custom company-pricing proposals reserve units only when approved. Approval and forwarding do not deduct physical stock. **Forwarded stockist orders remain reserved** because forwarding does not confirm supply; there is no new stockist Completed action.
 
-Company completion deducts company stock only. Cancellation releases reserved stock. Existing historical delivered stockist movements are preserved. Delivered-sales achievement continues to count completed company supply and historical delivered stockist sales. Forwarded stockist orders are shown separately in the monthly report and do not silently inflate delivered targets.
+Company completion allocates unexpired batches automatically and deducts company stock only. Admin can choose which approved order to fulfil first; other orders remain awaiting stock if necessary. Completion is blocked when unexpired physical stock is insufficient. Cancellation releases reserved stock. Existing historical delivered stockist movements are preserved. Delivered-sales achievement continues to count completed company supply and historical delivered stockist sales. Forwarded stockist orders are shown separately in the monthly report and do not silently inflate delivered targets.
 
 Month closing requires resolution of unapproved orders and incomplete company orders. Approved stockist orders can remain as reservations; reconciliation still checks those units. Communication failures remain visible in delivery logs and order forwarding status. A later gateway receipt can update communication status without changing a locked month's sales, stock or approved report snapshot.
+
+## MR order entry
+
+Select the customer, supply source, product, quantity and an optional approved scheme. Packing, PTS and PTR are displayed for reference; they cannot be edited by the MR. Only direct company orders show an optional **Special proposed rate** for bulk orders. Admin must approve price departures. Internal sample/gift costs remain hidden. Existing orders and month locks are retained.
 
 ## Editable templates
 
