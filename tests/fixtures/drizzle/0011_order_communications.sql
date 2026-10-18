@@ -1,0 +1,9 @@
+ALTER TABLE invoices ADD COLUMN forwarded_revision INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN forwarded_at TEXT NOT NULL DEFAULT '';
+ALTER TABLE whatsapp_outbox ADD COLUMN group_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE whatsapp_outbox ADD COLUMN gateway_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE whatsapp_outbox ADD COLUMN gateway_status TEXT NOT NULL DEFAULT '';
+ALTER TABLE whatsapp_outbox ADD COLUMN gateway_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE whatsapp_outbox ADD COLUMN gateway_session TEXT NOT NULL DEFAULT '';
+ALTER TABLE whatsapp_outbox ADD COLUMN checked_at TEXT NOT NULL DEFAULT '';
+ALTER TABLE invoices ADD COLUMN forwarding_state TEXT NOT NULL DEFAULT '';

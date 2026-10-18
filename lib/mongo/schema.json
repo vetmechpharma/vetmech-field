@@ -598,6 +598,27 @@
       "default": "0",
       "pk": 0,
       "notnull": 1
+    },
+    {
+      "name": "forwarded_revision",
+      "type": "INTEGER",
+      "default": "0",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "forwarded_at",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "forwarding_state",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
     }
   ],
   "stock_balances": [
@@ -767,6 +788,48 @@
       "default": null,
       "pk": 0,
       "notnull": 0
+    },
+    {
+      "name": "group_id",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "gateway_id",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "gateway_status",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "gateway_url",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "gateway_session",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "checked_at",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
     }
   ],
   "order_edits": [

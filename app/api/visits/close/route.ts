@@ -1,6 +1,7 @@
+import {whatsappStatements,orderQuantityItems} from '../../../../lib/order-messages';
 import {customerLocationStatements} from '../../../../lib/customer-location';
 import {communicationConfig} from '../../../../lib/communication-settings';
-import {renderMessage} from '../../../../lib/message-templates';
+import {renderMessage,doctorName,messageDate} from '../../../../lib/message-templates';
 import {emailStatement} from '../../../../lib/email';
 import {periodGuard} from '../../../../lib/periods';
 import {z} from 'zod';
@@ -22,14 +23,15 @@ export async function POST(req:Request){try{
   if(kind==='sample'&&i.commitmentId){const p=await db().prepare('SELECT * FROM commitments WHERE id=? AND customer_id=? AND mr_email=? AND product_id=?').bind(i.commitmentId,c.id,m.email,i.itemId).first<{quantity:number;fulfilled:number}>();if(!p||p.quantity-p.fulfilled<i.qty)throw new HttpError(400,'This quantity exceeds the remaining sample commitment.');statements.push(db().prepare('UPDATE commitments SET fulfilled=fulfilled+? WHERE id=?').bind(i.qty,i.commitmentId));statements.push(guard('commitment','COALESCE((SELECT fulfilled>=0 AND fulfilled<=quantity FROM commitments WHERE id=?),0)',[i.commitmentId]));}
  }}
  statements.push(...customerLocationStatements(c,gps,{name:b.locationName,address:b.locationAddress},b.id,m));
- const orders=(await db().prepare("SELECT number,items,total FROM invoices WHERE visit_id=? AND kind='secondary' AND status<>'Cancelled'").bind(b.id).all<{number:string;items:string;total:number}>()).results;
+ const orders=(await db().prepare("SELECT number,items FROM invoices WHERE visit_id=? AND kind='secondary' AND status<>'Cancelled'").bind(b.id).all<{number:string;items:string}>()).results;
  let phone=(c.details['Mobile 1']||c.details.Phone||'').replace(/\D/g,'');if(phone.length===10)phone='91'+phone;if(phone.length<10||phone.length>15)phone='';
- const orderText=orders.map(o=>`${o.number}: ${JSON.parse(o.items).map((l:any)=>`${l.name} ${l.qty}${l.free?` + ${l.free} free`:''}`).join(', ')}. Bill ₹${(o.total/100).toFixed(2)}`).join('\n');
- const config=await communicationConfig(),message=renderMessage(config.templates.visit_thanks,{customer_name:((c.details.Prefix||'')+' '+c.details.Name).trim(),mr_name:m.name,orders:orderText?'Your order:\n'+orderText:''}),outboxId=`visit:${b.id}`;
+ const proposals=(await db().prepare("SELECT body FROM workflow_requests WHERE kind='direct_order' AND status='Pending' AND mr_email=?").bind(m.email).all<{body:string}>()).results.map(r=>JSON.parse(r.body)).filter(p=>p.input.visitId===b.id&&p.input.customerId===c.id);for(const p of proposals)orders.push({number:p.input.number||`ORD-${p.input.date.replaceAll('-','')}-${p.input.id.slice(0,8).toUpperCase()}`,items:JSON.stringify(p.items)});
+ const orderText=(await Promise.all(orders.map(async o=>`${o.number}:\n${await orderQuantityItems(JSON.parse(o.items))}`))).join('\n');
+ const config=await communicationConfig(),message=renderMessage(config.templates.visit_thanks,{customer_name:doctorName(c.details.Name),mr_name:m.name,date:messageDate(visit.details.Date),orders:orderText?'Orders recorded (subject to Admin approval):\n'+orderText:''}),outboxId=`visit:${b.id}`,messages=whatsappStatements(outboxId,b.id,m.email,phone,message);
  if(config.smtpEnabled&&c.details.Email)statements.push(emailStatement(outboxId,m.email,c.details.Email,'Thank you for your time — VETMECH',message));
  statements.push(db().prepare("UPDATE records SET data=json_set(data,'$.Status','Closed','$.\"Closed at\"',?,'$.\"Closing notes\"',?,'$.\"Closing GPS\"',?,'$.Location',?,'$.\"Location captured at\"',?) WHERE id=?").bind(now,b.notes,JSON.stringify(gps),gpsString(gps),gps.capturedAt,b.id));
  statements.push(db().prepare("UPDATE records SET data=json_set(data,'$.\"Location name\"',?,'$.\"Location address\"',?) WHERE id=?").bind(b.locationName,b.locationAddress,b.id));
- statements.push(db().prepare('INSERT INTO whatsapp_outbox(id,visit_id,mr_email,phone,message,status,created) VALUES (?,?,?,?,?,?,?)').bind(outboxId,b.id,m.email,phone,message,phone?'awaiting_setup':'missing_phone',now));
+ statements.push(...messages.statements);
  try{await db().batch(statements)}catch(e){ledgerFailure(e)}
- try{await sendWhatsApp(outboxId)}catch{}return json({ok:true});
+ await Promise.allSettled(messages.ids.map(sendWhatsApp));return json({ok:true});
 }catch(e){return failure(e)}}

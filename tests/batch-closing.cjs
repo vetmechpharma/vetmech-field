@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
-function load(p){const m={exports:{}};new Function('exports','module',ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(m.exports,m);return m.exports}
+function load(p){const m={exports:{}};new Function('require','exports','module',ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>load(require('node:path').resolve(require('node:path').dirname(p),name+'.ts')),m.exports,m);return m.exports}
 const {batchInventory,allocateBatches,expiryLimit}=load('lib/batch-stock.ts'),{closingChecklist}=load('lib/closing-checklist.ts');
 assert.equal(expiryLimit('2026-08-31'),'2027-02-28');assert.equal(expiryLimit('2023-08-31'),'2024-02-29');
 const receipt=(id,batch,expiry,qty)=>({id,kind:'primary',status:'Delivered',stockist_id:'s',items:[{productId:'p',name:'Product',batch,expiry,qty,free:0}]});
@@ -11,4 +11,5 @@ rows=batchInventory([...invoices,{...order,status:'Cancelled'}],balances);assert
 rows=batchInventory([...invoices,order],balances,'o');assert.equal(rows.find(r=>r.batch==='A').available,10);
 const legacy=batchInventory([], [{stockist_id:'s',product_id:'p',quantity:9}]);assert.equal(legacy[0].expiry,'');assert.equal(legacy[0].available,9);
 let checklist=closingChecklist('2026-10',[order],[{id:'r',kind:'leave',status:'Pending',body:'{}',created:'2026-10-01',mr_email:'mr'}],balances,[],[{...balances[0],quantity:35}]);assert.equal(checklist[0].items.length,1);assert.equal(checklist[1].items.length,1);assert.equal(checklist[2].items.length,1);checklist=closingChecklist('2026-10',[],[],balances,[],[{...balances[0],quantity:35}]);assert.equal(checklist.flatMap(c=>c.items).length,0);
+assert.equal(closingChecklist('2026-10',[{...order,accepted:1}],[],balances,[{stockist_id:'s',product_id:'p',quantity:13}],[{...balances[0],quantity:35}])[0].items.length,0);assert.equal(closingChecklist('2026-10',[{...order,stockist_id:'company-stock',accepted:1}],[],[],[],[])[0].items.length,1);
 console.log('PASS: six-month boundaries; FEFO paid/free allocations; expired rejection; reservation, delivery, cancellation, edit release; legacy stock; closing blockers and reconciliation.');

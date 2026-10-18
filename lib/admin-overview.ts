@@ -1,3 +1,4 @@
+import {unresolvedOrder} from './order-workflow';
 import {canRead,type Member} from './permissions';
 import {idList} from './field-rules';
 import {totals,owned,type Row} from './monthly-report';
@@ -15,4 +16,4 @@ export function overdueActions(today:string,reps:Member[],records:Row[],tasks:Ro
  const visits=records.filter(r=>r.kind==='Visits'&&owned(r,m)).sort((a,b)=>(b.data.Date||b.created).localeCompare(a.data.Date||a.created)||b.created.localeCompare(a.created)),seen=new Set();for(const v of visits){const id=v.data['Customer ID']||records.find(c=>c.kind==='Customers'&&c.data.Name===v.data.Customer)?.id;if(!id||seen.has(id))continue;seen.add(id);if(saved.some(t=>t.source==='visit:'+v.id))continue;const c=customer(m,id);if(c&&v.data['Follow-up date']&&v.data['Follow-up date']<today)result.push({id:'visit:'+v.id,mr_email:m.email,mr:m.name,customer:c.data.Name,customer_id:id,route:c.data.Route,due:v.data['Follow-up date'],title:'Visit due',notes:v.data.Response||''})}}
  return result.sort((a,b)=>a.due.localeCompare(b.due));
 }
-export function pendingMonths(today:string,records:Row[],invoices:Row[],locks:Row[]){const dates=[...records.map(r=>r.data.Date),...invoices.map(i=>i.date)].filter((d):d is string=>typeof d==='string'&&/^20\d{2}-(0[1-9]|1[0-2])-\d{2}$/.test(d)).sort();if(!dates.length)return [];const result=[];let month=dates[0].slice(0,7);while(month<today.slice(0,7)){if(!locks.some(l=>l.month===month&&l.closed))result.push({month,placed:invoices.filter(i=>i.kind==='secondary'&&i.status==='Placed'&&i.date.slice(0,7)<=month).length});month=shiftMonth(month,1)}return result;}
+export function pendingMonths(today:string,records:Row[],invoices:Row[],locks:Row[]){const dates=[...records.map(r=>r.data.Date),...invoices.map(i=>i.date)].filter((d):d is string=>typeof d==='string'&&/^20\d{2}-(0[1-9]|1[0-2])-\d{2}$/.test(d)).sort();if(!dates.length)return [];const result=[];let month=dates[0].slice(0,7);while(month<today.slice(0,7)){if(!locks.some(l=>l.month===month&&l.closed))result.push({month,placed:invoices.filter(i=>unresolvedOrder(i)&&i.date.slice(0,7)<=month).length});month=shiftMonth(month,1)}return result;}
