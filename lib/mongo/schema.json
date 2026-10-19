@@ -162,6 +162,13 @@
       "default": "'[]'",
       "pk": 0,
       "notnull": 1
+    },
+    {
+      "name": "photo_version",
+      "type": "TEXT",
+      "default": "''",
+      "pk": 0,
+      "notnull": 1
     }
   ],
   "notifications": [
@@ -1384,6 +1391,29 @@
       "default": null,
       "pk": 0,
       "notnull": 0
+    }
+  ],
+  "employee_photos": [
+    {
+      "name": "email",
+      "type": "TEXT",
+      "default": null,
+      "pk": 1,
+      "notnull": 1
+    },
+    {
+      "name": "image_base64",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
+    },
+    {
+      "name": "updated",
+      "type": "TEXT",
+      "default": null,
+      "pk": 0,
+      "notnull": 1
     }
   ]
 }

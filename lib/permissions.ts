@@ -2,7 +2,7 @@ import {customerVisible,idList} from './field-rules';
 export const TEST_MR_EMAIL = 'test-mr@vetmech.invalid';
 export const OWNER_EMAIL = 'vetmechpharma@gmail.com';
 export type Role = 'admin' | 'mr';
-export type Member = {route_ids?:string;district_ids?:string;stockist_ids?:string;test_mode?:boolean;username?:string;email:string;user_id:string|null;name:string;role:Role;status:string;territory:string;target:number;mr_type:string;district:string;headquarters:string;route:string;phone:string;employee_code:string};
+export type Member = {photo_version?:string;route_ids?:string;district_ids?:string;stockist_ids?:string;test_mode?:boolean;username?:string;email:string;user_id:string|null;name:string;role:Role;status:string;territory:string;target:number;mr_type:string;district:string;headquarters:string;route:string;phone:string;employee_code:string};
 export type StoredRecord = {id:string;owner:string;kind:string;data:string;created:string;assigned_to:string};
 export const kinds=['Customers','Stockists','Products','Visits','Tour plan','Orders','Secondary sales','Primary sales','Samples','Expenses','Attendance','Settings','Districts','Headquarters','Routes','MR types','Gifts'];
 export const masterKinds=['Customers','Stockists','Products','Districts','Headquarters','Routes','MR types','Gifts'];

@@ -3,12 +3,13 @@ import {readJSON,admin,db,json,failure,sameOrigin,notification,HttpError} from '
 import {passwordHash} from '../../../lib/passwords';
 import {OWNER_EMAIL,type Member} from '../../../lib/permissions';
 import {audit} from '../../../lib/admin-audit';
+import {MAX_PHOTO_DATA_URL,normalizeEmployeePhoto} from '../../../lib/employee-photo';
 const ids=z.array(z.string().min(1).max(100)).max(200).optional();
 const short=z.string().trim().max(100).default('');
-const schema=z.object({route_ids:ids,district_ids:ids,stockist_ids:ids,email:z.string().email().transform(s=>s.toLowerCase().trim()).or(z.literal('')).optional(),username:z.string().trim().toLowerCase().regex(/^[a-z0-9._-]{3,50}$/).optional(),password:z.string().min(1).max(128).or(z.literal('')).optional(),name:z.string().trim().min(2).max(100),territory:short,target:z.number().int().min(0).max(100000000).optional(),status:z.enum(['active','disabled']),mr_type:short,district:short,headquarters:short,route:short,phone:z.string().max(30).default(''),employee_code:short});
+const schema=z.object({photo:z.string().max(MAX_PHOTO_DATA_URL).nullable().optional(),route_ids:ids,district_ids:ids,stockist_ids:ids,email:z.string().email().transform(s=>s.toLowerCase().trim()).or(z.literal('')).optional(),username:z.string().trim().toLowerCase().regex(/^[a-z0-9._-]{3,50}$/).optional(),password:z.string().min(1).max(128).or(z.literal('')).optional(),name:z.string().trim().min(2).max(100),territory:short,target:z.number().int().min(0).max(100000000).optional(),status:z.enum(['active','disabled']),mr_type:short,district:short,headquarters:short,route:short,phone:z.string().max(30).default(''),employee_code:short});
 export async function GET(){try{await admin();return json({members:(await db().prepare('SELECT m.*, c.username FROM members m LEFT JOIN credentials c ON c.email=m.email ORDER BY m.role, m.name').all()).results})}catch(e){return failure(e)}}
 export async function POST(req:Request){try{
- sameOrigin(req);const actor=await admin();const parsed=schema.safeParse(await readJSON(req));if(!parsed.success)throw new HttpError(400,'Enter a name, valid username, non-empty password.');const b=parsed.data;const email=b.email|| (b.username?b.username+'@mr.vetmech.invalid':'');if(!email)throw new HttpError(400,'Enter an MR username.');if(email===OWNER_EMAIL)throw new HttpError(400,'The owner account cannot be changed here.');
+ sameOrigin(req);const actor=await admin();const parsed=schema.safeParse(await readJSON(req));if(!parsed.success)throw new HttpError(400,parsed.error.issues.some(issue=>issue.path[0]==='photo')?'Photo is too large or invalid. Choose it again to resize it.':'Enter a name, valid username, non-empty password.');const b=parsed.data;const email=b.email|| (b.username?b.username+'@mr.vetmech.invalid':'');if(!email)throw new HttpError(400,'Enter an MR username.');if(email===OWNER_EMAIL)throw new HttpError(400,'The owner account cannot be changed here.');
  const old=await db().prepare('SELECT * FROM members WHERE email = ?').bind(email).first<Member>();
  if(old&&old.role!=='mr')throw new HttpError(403,'Admin accounts cannot be changed through MR management.');
  const login=await db().prepare('SELECT username FROM credentials WHERE email=?').bind(email).first<{username:string}>();
@@ -19,6 +20,7 @@ export async function POST(req:Request){try{
  for(const [chosen,kind] of [[chosenRoutes,'Routes'],[chosenDistricts,'Districts'],[chosenStockists,'Stockists']] as [string[],string][]){if(chosen.some(id=>!all.some(r=>r.id===id&&r.kind===kind)))throw new HttpError(400,`Select valid ${kind.toLowerCase()}.`);}
  const derivedDistricts=all.filter(r=>r.kind==='Districts'&&chosenRoutes.some((id:string)=>{const route=all.find(x=>x.id===id);return route&&JSON.parse(route.data).District===JSON.parse(r.data).Name})).map(r=>r.id);
  const districtIds=[...new Set([...chosenDistricts,...derivedDistricts])];
+ const photo=typeof b.photo==='string'?await normalizeEmployeePhoto(b.photo):b.photo;
  const statements=[db().prepare('INSERT INTO members (email,name,role,status,territory,target,created,mr_type,district,headquarters,route,phone,employee_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET name=excluded.name,status=excluded.status,territory=excluded.territory,target=excluded.target,mr_type=excluded.mr_type,district=excluded.district,headquarters=excluded.headquarters,route=excluded.route,phone=excluded.phone,employee_code=excluded.employee_code').bind(email,b.name,'mr',b.status,b.territory,old?.target||0,new Date().toISOString(),'Medical Representative',b.district,b.headquarters,b.route,b.phone,b.employee_code)];
  statements.push(db().prepare('UPDATE members SET route_ids=?,district_ids=?,stockist_ids=? WHERE email=?').bind(JSON.stringify(chosenRoutes),JSON.stringify(districtIds),JSON.stringify(chosenStockists),email));
  statements.push(db().prepare('UPDATE members SET user_id=? WHERE email=? AND user_id IS NULL').bind(crypto.randomUUID(),email));
@@ -27,7 +29,12 @@ export async function POST(req:Request){try{
  if(b.password||b.status==='disabled')statements.push(db().prepare('DELETE FROM sessions WHERE email=?').bind(email));
  if(old&&old.name!==b.name)statements.push(db().prepare("UPDATE records SET data = json_set(data,'$.Representative',?) WHERE assigned_to = ?").bind(b.name,email));
  if(b.status==='active')statements.push(notification(email,old?'Profile updated':'Welcome to VETMECH Field',old?'Your Admin updated your profile or territory.':'Your MR account is ready. Start with your assigned doctors.','Dashboard'));
- const {password,...profile}=b;
- statements.push(audit(actor,old?'MR account updated':'MR account created','Team',email,old?{name:old.name,status:old.status,route_ids:old.route_ids,district_ids:old.district_ids,stockist_ids:old.stockist_ids,username:login?.username}:null,{...profile,passwordChanged:!!password},password?'MR credentials set by Admin':'MR profile / territory change'));
+ if(photo!==undefined){
+  if(photo===null)statements.push(db().prepare('DELETE FROM employee_photos WHERE email=?').bind(email));
+  else statements.push(db().prepare('INSERT INTO employee_photos (email,image_base64,updated) VALUES (?,?,?) ON CONFLICT(email) DO UPDATE SET image_base64=excluded.image_base64,updated=excluded.updated').bind(email,photo.imageBase64,new Date().toISOString()));
+  statements.push(db().prepare('UPDATE members SET photo_version=? WHERE email=?').bind(photo?.version||'',email));
+ }
+ const {password,photo:submittedPhoto,...profile}=b;
+ statements.push(audit(actor,old?'MR account updated':'MR account created','Team',email,old?{name:old.name,status:old.status,route_ids:old.route_ids,district_ids:old.district_ids,stockist_ids:old.stockist_ids,username:login?.username}:null,{...profile,passwordChanged:!!password,...(submittedPhoto!==undefined?{photoAction:photo===null?'removed':'updated'}:{})},password?'MR credentials set by Admin':'MR profile / territory change'));
  await db().batch(statements);return json({ok:true})
 }catch(e){return failure(e)}}
