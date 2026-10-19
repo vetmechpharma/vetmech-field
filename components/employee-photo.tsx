@@ -50,7 +50,7 @@ export function EmployeePhotoPicker({employee,value,onChange,onBusyChange,disabl
   <EmployeeAvatar employee={employee} large preview={value}/>
   <div className="employee-photo-controls"><b>Employee photo</b><p>JPG, PNG or WebP · up to 10 MB. A small square preview is saved.</p>
    <div className="employee-photo-actions">
-    <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Employee photo file" hidden disabled={disabled||busy} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void choose(file)}}/>
+    <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Employee photo file" hidden style={{display:'none'}} disabled={disabled||busy} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void choose(file)}}/>
     <button type="button" className="secondary" disabled={disabled||busy} onClick={()=>input.current?.click()}>{busy?<LoaderCircle size={16} className="spin"/>:<Camera size={16}/>} {busy?'Preparing photo…':hasPhoto?'Change photo':'Add photo'}</button>
     {hasPhoto&&<button type="button" className="text-button" disabled={disabled||busy} onClick={()=>{setError('');onChange(null)}}><Trash2 size={16}/>Remove photo</button>}
     {value!==undefined&&<button type="button" className="text-button" disabled={disabled||busy} onClick={()=>{setError('');onChange(undefined)}}>Undo photo change</button>}
