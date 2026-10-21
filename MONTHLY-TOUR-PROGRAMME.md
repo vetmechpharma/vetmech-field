@@ -4,8 +4,8 @@ VETMECH Field Force MR App now requires an **Admin-approved monthly route progra
 
 ## Set up before the first field day
 
-1. Admin opens **Tour plan → Government holidays** for the selected year.
-2. Review and confirm the government, state and local holidays applicable to the team. Sundays are always excluded. Republic Day, Independence Day and Gandhi Jayanti remain holidays.
+1. Admin opens **Tour plan → Monthly tour programme**, selects **Next month** (or any future month), and opens **Company holidays**. No MR selection is needed to publish shared holidays.
+2. Add each applicable festival or company holiday by date, holiday name and note, then select **Publish holidays for all MRs**. Sundays are automatic holidays. Republic Day, Independence Day and Gandhi Jayanti remain in the shared calendar. Publish before the current month ends so MRs can prepare next month.
 3. MR opens **Tour plan → Monthly tour programme**, chooses the month and assigns one or more accessible routes to each working date. The bulk-fill button repeats selected routes across working days; individual days can then be adjusted. Leave days require a reason.
 4. MR selects **Submit month for approval**. Draft and pending programmes do not permit visits.
 5. Admin opens **Approvals → Tour programme approvals**, reviews every date and approves or rejects with a reason. The MR receives an in-app notification.
@@ -13,9 +13,11 @@ VETMECH Field Force MR App now requires an **Admin-approved monthly route progra
 
 Future months can be prepared in advance. A first programme created partway through the current month starts from today; earlier attendance and visits remain unchanged. Approval never carries into the next month. Each new month needs its own approved programme.
 
-## Government holiday calendar
+## Shared monthly holiday calendar
 
-The app uses a company-wide calendar that Admin confirms each year. There is a **2026 Central government reference** for Delhi/New Delhi offices. It is a starting point for review, not a complete Tamil Nadu or all-state holiday calendar. Add the applicable Tamil Nadu holidays, including Pongal, before confirmation. Regional or later government notifications must also be entered by Admin. Other years require Admin to enter and confirm the published dates.
+Each month has its own company-wide holiday calendar, publication status and revision. Publishing December does not invalidate November’s pending tour approvals. MRs see the same holiday dates and notes; they cannot edit the shared calendar. They can save a tour draft beforehand, but submission requires Admin to publish that month’s holidays. Publication sends an in-app notification to active MRs.
+
+A **2026 Central government reference** for Delhi/New Delhi offices can populate the selected month. It is optional and is not a complete Tamil Nadu or all-state calendar. Admin must review regional festivals and company holidays before publication. Dates are not automatically fetched or approved from external holiday lists.
 
 Reference sources used for the 2026 Central preset:
 
@@ -23,7 +25,21 @@ Reference sources used for the 2026 Central preset:
 - [DoPT: holiday on 14 April 2026](https://dopt.gov.in/sites/default/files/Declaration%20of%20Holiday%20on%2014.04.2026%20-%20Birthday%20of%20Dr.%20B.R.%20Ambedkar.pdf)
 - [DoPT: Id-ul-Zuha date amendment](https://dopt.gov.in/sites/default/files/Change%20in%20the%20date%20of%20holiday%20of%20Id-ul-Zuha.PDF)
 
-If holidays change while a programme is pending, Admin must reject it so the MR can review and resubmit. Adding a future holiday removes that date from active planned visits. Removing a holiday may leave a date without an approved route; the MR must request a route for that date. Past confirmed holiday dates cannot be changed. A date with an open visit cannot be converted to a holiday.
+If this month’s holiday calendar changes while a programme or holiday work request is pending, Admin must reject that submission so the MR can review and resubmit. Adding a holiday removes ordinary route tasks for that date from active planned visits. Removing a holiday cancels individual holiday work permissions for that date; a date without an ordinary approved route needs a route-change request. A Sunday remains a holiday even if its festival label is removed. Past dates, closed periods and dates with open visits cannot be changed.
+
+On upgrade, an already reviewed annual calendar remains usable for current or past months with an existing approved programme. A new month without an approved programme requires explicit monthly publication. Previous annual calendar records and archived monthly reports are retained.
+
+## Request permission to work on a holiday
+
+1. MR chooses the month and selects **Request to work** on a Sunday or another published holiday.
+2. Select one or more accessible routes and provide a reason. This can be done before submitting the monthly programme.
+3. Admin opens **Approvals → Tour programme approvals** and reviews the MR, date, holiday note, original plan and requested routes. Approve or reject; rejection requires a reason.
+4. Approval applies only to that MR and date. The shared holiday remains unchanged for other MRs. The route’s eligible customers appear in planned visits once the monthly programme is also approved.
+5. **Both approvals, Start Day and existing GPS/customer-access requirements apply to visits.** A holiday permission by itself does not unlock a missing, draft or pending monthly programme.
+
+An MR can withdraw a pending request. After approval, **Change holiday work** lets the MR request different routes or cancellation. Existing permission stays active until Admin approves that change. Duplicate pending requests for the same MR/date are blocked. Regular date changes and holiday requests can be reviewed independently. Past-date approval, disabled accounts, inaccessible routes and locked periods are rejected. Requests whose dates passed must be rejected and submitted again with new dates.
+
+Attendance shows unused holidays in **purple**, separately from personal leave and missing work records. On an approved holiday work date, a missed check-in/check-out is shown as incomplete or missing. Actual GPS check-in and checkout make the day green and calculate working duration; approval alone does not create attendance. A recorded check-in on a holiday without recorded permission remains visible to Admin with that distinction. Reports include holiday notes and individual holiday work decisions.
 
 ## Change, postpone or request leave
 
@@ -47,7 +63,7 @@ Open visits must be closed before a date change can be requested or approved. Pa
 - Customers can be visited only through today's approved routes. Customer access, availability status, Start Day, same-day closing and GPS checks still apply.
 - Route/date changes preserve the original schedule, reason, reviewer and time. Approved leave or moved schedules remove the affected tasks from active pending visits while retaining history.
 - One completed customer visit counts as monthly coverage. Cancelled or postponed tasks alone do not count as visits.
-- Admin can review all monthly programmes, requests and history. MR reports and PDF exports include the daily programme and approved changes alongside customer coverage.
+- Admin can review all monthly programmes, requests and history. MR reports and PDF exports include the daily programme, approved changes and holiday work decisions alongside customer coverage.
 - Month-closing review includes unresolved monthly tour submissions and change requests.
 
 ## Update the existing VPS
@@ -84,4 +100,4 @@ Monthly programmes use the existing MongoDB records and workflow-request collect
 
 ## Verification
 
-The automated suite covers authentication/ownership, complete working-day plans, calendar revisions, approval permissions, duplicate tasks, visit/draft restrictions, route and date changes, leave attendance, month rollover, reporting-period locks, immutable schedule history and transactional conflict detection. UI tests exercise multi-route selection, holiday exclusions, draft/submit/withdraw actions, request previews and Admin approval controls. GitHub CI also runs these handlers against an isolated MongoDB replica set and builds the production app. Tests do not send live WhatsApp or email messages.
+The automated suite covers authentication/ownership, complete working-day plans, monthly publication and revision isolation, shared holiday notes, individual holiday work approval/rejection/cancellation, approval before monthly submission, holiday attendance, calendar removal, approval permissions, duplicate tasks, visit/draft restrictions, route and date changes, leave attendance, month rollover, reporting-period locks, immutable schedule history and transactional conflict detection. UI tests exercise multi-route selection, holiday exclusions, draft/submit/withdraw actions, request previews, holiday work forms, next-month holiday publication and Admin approval controls. GitHub CI also runs these handlers against an isolated MongoDB replica set and builds the production app. Tests do not send live WhatsApp or email messages.
