@@ -1,3 +1,5 @@
+import {approvedTourGuards,gateFrom} from '../../../lib/monthly-tour-server';
+import {expandProgrammes,programmeKind,calendarKind} from '../../../lib/monthly-tour';
 import {headquartersDistrictIDs,headquartersCovers,districtState} from '../../../lib/geography';
 import {requestOutsideCustomer} from '../../../lib/field-requests';
 import {customerPriority} from '../../../lib/field-updates';
@@ -23,7 +25,8 @@ export async function GET(){try{
  const sales=(await db().prepare("SELECT * FROM invoices WHERE kind='secondary'").all<any>()).results;
  const result=await db().prepare('SELECT * FROM records ORDER BY created DESC, rowid DESC').all<StoredRecord>();
  const geography=result.results.filter(r=>['Districts','Headquarters','Routes'].includes(r.kind)).map(r=>({...r,data:JSON.parse(r.data)}));
- return json({records:result.results.filter(r=>r.kind!=='Leave'&&canRead(m,r)).map(r=>{const data=JSON.parse(r.data);if(m.role==='mr'&&r.kind==='Customers'){const routeId=accessRoute(m,data);if(routeId){const route=result.results.find(x=>x.id===routeId);if(route){data['Route ID']=routeId;data.Route=JSON.parse(route.data).Name;data.District=JSON.parse(route.data).District||'';data.Headquarters=JSON.parse(route.data).Headquarters||'';}}delete data['MR route access'];delete data['Blocked MRs'];delete data['Outside route MRs'];}if(r.kind==='Customers')data.State=districtState(data.District,geography);if(m.role==='mr'&&r.kind==='Products'){delete data['Unit cost'];delete data['Sample cost'];}if(m.role==='mr'&&['Samples','Gifts'].includes(r.kind)){for(const k of ['Unit cost','Sample cost','Cost','Total cost','Rate'])delete data[k];}return {...r,data,...(r.kind==='Customers'?{priority:customerPriority({...r,data},sales,result.results.filter(x=>x.kind==='Visits').map(x=>({...x,data:JSON.parse(x.data)})),new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}))}:{})};})});
+ const expanded=expandProgrammes(result.results.map(r=>({...r,data:JSON.parse(r.data)}))).map(r=>({...r,owner:r.owner||'',created:r.created||'',data:JSON.stringify(r.data)}));
+ return json({tourGate:m.role==='mr'?gateFrom(result.results.map(r=>({...r,data:JSON.parse(r.data)})),m):null,records:expanded.filter(r=>!['Leave',programmeKind,calendarKind].includes(r.kind)&&canRead(m,r)).map(r=>{const data=JSON.parse(r.data);if(m.role==='mr'&&r.kind==='Customers'){const routeId=accessRoute(m,data);if(routeId){const route=result.results.find(x=>x.id===routeId);if(route){data['Route ID']=routeId;data.Route=JSON.parse(route.data).Name;data.District=JSON.parse(route.data).District||'';data.Headquarters=JSON.parse(route.data).Headquarters||'';}}delete data['MR route access'];delete data['Blocked MRs'];delete data['Outside route MRs'];}if(r.kind==='Customers')data.State=districtState(data.District,geography);if(m.role==='mr'&&r.kind==='Products'){delete data['Unit cost'];delete data['Sample cost'];}if(m.role==='mr'&&['Samples','Gifts'].includes(r.kind)){for(const k of ['Unit cost','Sample cost','Cost','Total cost','Rate'])delete data[k];}return {...r,data,...(r.kind==='Customers'?{priority:customerPriority({...r,data},sales,result.results.filter(x=>x.kind==='Visits').map(x=>({...x,data:JSON.parse(x.data)})),new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}))}:{})};})});
 }catch(e){return failure(e)}}
 
 export async function POST(req:Request){try{
@@ -167,7 +170,8 @@ export async function POST(req:Request){try{
   const query=existing?`UPDATE records SET data=?,assigned_to=? WHERE id=? AND ${condition} RETURNING id`:`INSERT INTO records (id,owner,kind,data,created,assigned_to) SELECT ?,?,?,?,?,? WHERE ${condition} RETURNING id`;
   const args=existing?[JSON.stringify(b.data),assignedTo,id,fieldDay,m.email,m.user_id]:[id,m.user_id,b.kind,JSON.stringify(b.data),now,assignedTo,fieldDay,m.email,m.user_id];
   if(b.kind==='Attendance')args.push(fieldDay,m.email,m.user_id,b.data.Action);if(b.kind==='Attendance'&&b.data.Action==='Check out')args.push(fieldDay,m.email,m.user_id);
-  const saved=await db().prepare(query).bind(...args).first();
+  const stmt=db().prepare(query).bind(...args);
+  const saved=b.kind==='Visits'?(await db().batch([...await approvedTourGuards(m,fieldDay,b.data['Customer ID']),stmt])).at(-1)?.results[0]:await stmt.first();
   if(!saved)throw new HttpError(409,b.kind==='Attendance'?'Only one check-in and one checkout are allowed per day. Close open visits before checkout.':'Start my day before recording a visit.');
   return json({ok:true,id});
  }
@@ -184,7 +188,7 @@ export async function POST(req:Request){try{
 export async function DELETE(req:Request){try{
  sameOrigin(req);const m=await member();if(m.role!=='admin')throw new HttpError(403,'Only Admin can delete records.');
  const b=await readJSON(req) as {id?:string};if(typeof b.id!=='string')throw new HttpError(400,'Choose a record.');
- const existing=await db().prepare('SELECT * FROM records WHERE id = ?').bind(b.id).first<StoredRecord>();if(!existing)throw new HttpError(404,'Record not found.');const data=JSON.parse(existing.data);if(existing.kind==='Tour plan')throw new HttpError(400,'Cancel the plan instead of deleting its history.');if(data['Invoice ID']||data['Ledger ID'])throw new HttpError(403,'Posted ledger records cannot be deleted individually.');
+ const existing=await db().prepare('SELECT * FROM records WHERE id = ?').bind(b.id).first<StoredRecord>();if(!existing)throw new HttpError(404,'Record not found.');const data=JSON.parse(existing.data);if([programmeKind,calendarKind].includes(existing.kind))throw new HttpError(403,'Manage monthly programmes and holidays from Tour plan.');if(existing.kind==='Tour plan')throw new HttpError(400,'Cancel the plan instead of deleting its history.');if(data['Invoice ID']||data['Ledger ID'])throw new HttpError(403,'Posted ledger records cannot be deleted individually.');
 
  if(data.Date)await assertOpen(data.Date);if(data.Month&&existing.id.startsWith('monthly-target:'))await assertOpen(data.Month);
  if(existing.kind==='Stockists'){

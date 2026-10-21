@@ -23,3 +23,7 @@ rows=batchInventory([...invoices,softOrder],balances,'',true,'2026-10-10');asser
 const completionRows=batchInventory([...invoices,softOrder],balances,'',false,'2026-10-10');const completedLine={productId:'p',name:'Product',qty:30,free:0};allocateBatches(completionRows,'s',[completedLine],'2026-10-10');assert.equal(completedLine.allocations.reduce((n,a)=>n+a.quantity,0),30);
 assert.equal(closingChecklist('2026-10',[{...softOrder,accepted:1}],[],balances,[demand[0]],[{...balances[0],quantity:35}])[2].items.length,0);
 console.log('PASS: shortages are explicit, available quantities are nonnegative, expired batches are excluded from planning, product demand may exceed stock, and completion uses physical stock.');
+
+const tourClosing=closingChecklist('2026-10',[],[{id:'tour-change',kind:'tour_change',status:'Pending',mr_email:'mr',created:'2026-09-20',body:JSON.stringify({from:'2026-10-08',programmes:[{month:'2026-10'},{month:'2026-11'}]})}],[],[],[],[{id:'tour-month',kind:'Tour programme',assigned_to:'mr',data:{month:'2026-10',status:'Pending'}},{id:'future-tour',kind:'Tour programme',assigned_to:'mr',data:{month:'2026-11',status:'Pending'}},{id:'approved-tour',kind:'Tour programme',assigned_to:'mr',data:{month:'2026-09',status:'Approved'}}]);
+assert.deepEqual(new Set(tourClosing[1].items.map(i=>i.id)),new Set(['tour-change','tour-month']));
+console.log('PASS: month closing includes pending monthly programmes and affected tour changes, excluding future or reviewed programmes.');

@@ -1,3 +1,4 @@
+import {approvedTourGuards} from '../../../../lib/monthly-tour-server';
 import {whatsappStatements,orderQuantityItems} from '../../../../lib/order-messages';
 import {customerLocationStatements} from '../../../../lib/customer-location';
 import {communicationConfig} from '../../../../lib/communication-settings';
@@ -17,7 +18,7 @@ export async function POST(req:Request){try{
  if(visit.details.Status==='Closed')return json({ok:true,alreadyClosed:true});
  if(visit.details.Date!==indiaDay())throw new HttpError(400,'Close the visit on the same day. Contact Admin for a correction.');
  const c=await customer(m,visit.details['Customer ID']),gps=requireGPS(b.gps);await activeDay(m);
- const now=new Date().toISOString();const statements=[periodGuard(visit.details.Date),guard('attendance',"COALESCE((SELECT json_extract(data,'$.Action') FROM records WHERE kind='Attendance' AND (assigned_to=? OR (assigned_to='' AND owner=?)) AND json_extract(data,'$.Date')=? ORDER BY created DESC,rowid DESC LIMIT 1),'')='Check in'",[m.email,m.user_id,indiaDay()]),db().prepare('INSERT INTO visit_closures(id,mr_email,closed_at,gps) VALUES (?,?,?,?)').bind(b.id,m.email,now,JSON.stringify(gps))];
+ const now=new Date().toISOString();const statements=[...await approvedTourGuards(m,visit.details.Date,c.id),periodGuard(visit.details.Date),guard('attendance',"COALESCE((SELECT json_extract(data,'$.Action') FROM records WHERE kind='Attendance' AND (assigned_to=? OR (assigned_to='' AND owner=?)) AND json_extract(data,'$.Date')=? ORDER BY created DESC,rowid DESC LIMIT 1),'')='Check in'",[m.email,m.user_id,indiaDay()]),db().prepare('INSERT INTO visit_closures(id,mr_email,closed_at,gps) VALUES (?,?,?,?)').bind(b.id,m.email,now,JSON.stringify(gps))];
  for(const [kind,items] of [['gift',b.gifts],['sample',b.samples]] as const){if(new Set(items.map(x=>x.itemId)).size!==items.length)throw new HttpError(400,'Select each sample or gift once and combine its quantity.');for(const i of items){
   statements.push(...await issueStatements(m,kind,i.itemId,i.qty,c.id,b.id,gps,`${b.id}:${kind}:${i.itemId}`));
   if(kind==='sample'&&i.commitmentId){const p=await db().prepare('SELECT * FROM commitments WHERE id=? AND customer_id=? AND mr_email=? AND product_id=?').bind(i.commitmentId,c.id,m.email,i.itemId).first<{quantity:number;fulfilled:number}>();if(!p||p.quantity-p.fulfilled<i.qty)throw new HttpError(400,'This quantity exceeds the remaining sample commitment.');statements.push(db().prepare('UPDATE commitments SET fulfilled=fulfilled+? WHERE id=?').bind(i.qty,i.commitmentId));statements.push(guard('commitment','COALESCE((SELECT fulfilled>=0 AND fulfilled<=quantity FROM commitments WHERE id=?),0)',[i.commitmentId]));}

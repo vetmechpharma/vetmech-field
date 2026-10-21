@@ -1,39 +1,15 @@
 import {readJSON,member,db,json,failure,sameOrigin,HttpError,notification} from '../../../lib/server';
 import {canRead,OWNER_EMAIL,type Member} from '../../../lib/permissions';
 import {guard,indiaDay,ledgerFailure} from '../../../lib/operations';
-import {assertOpen,periodGuard,stateSQL} from '../../../lib/periods';
-import {accessRoute} from '../../../lib/customer-access';
+import {stateSQL} from '../../../lib/periods';
 import {audit} from '../../../lib/admin-audit';
-import {customerStatuses,eligibleForPlan,planState,customerKey,type PlanRow} from '../../../lib/tour-planning';
+import {customerStatuses,planState,type PlanRow} from '../../../lib/tour-planning';
 const validDate=(d:any)=>typeof d==='string'&&/^20\d\d-\d\d-\d\d$/.test(d)&&!isNaN(Date.parse(d))&&new Date(d).toISOString().slice(0,10)===d;
 async function snapshot(){const raw=(await db().prepare('SELECT * FROM records').all<any>()).results;return {raw,rows:raw.map(r=>({...r,data:JSON.parse(r.data)})) as PlanRow[]};}
 export async function GET(){try{const m=await member(),{raw,rows}=await snapshot(),visible=raw.filter(r=>canRead(m,r)),ids=new Set(visible.map(r=>r.id));const requests=(await db().prepare("SELECT * FROM workflow_requests WHERE kind='customer_status' ORDER BY created DESC").all<any>()).results.filter(r=>m.role==='admin'||r.mr_email===m.email);return json({plans:rows.filter(r=>r.kind==='Tour plan'&&ids.has(r.id)).map(p=>({...p,state:planState(p,rows,indiaDay())})),requests:requests.map(r=>({...r,body:JSON.parse(r.body)}))});}catch(e){return failure(e)}}
 export async function POST(req:Request){try{sameOrigin(req);const m=await member(),b=await readJSON(req) as any,now=new Date().toISOString(),today=indiaDay(),stamp=(await db().prepare(stateSQL).first<{stamp:string}>())!.stamp,{raw,rows}=await snapshot(),statements=[guard('version',`(${stateSQL})=?`,[stamp])];
  const write=(r:any,data:any)=>statements.push(db().prepare('UPDATE records SET data=? WHERE id=?').bind(JSON.stringify(data),r.id));
- if(b.action==='plan'||b.action==='reschedule'||b.action==='cancel'){
- let owner=m;if(m.role==='admin'){owner=await db().prepare("SELECT * FROM members WHERE email=? AND role='mr' AND status='active'").bind(b.email||'').first<Member>() as Member;if(!owner)throw new HttpError(400,'Select an active MR.');}
- const original=b.id?rows.find(r=>r.id===b.id&&r.kind==='Tour plan'&&r.assigned_to===owner.email):undefined;
- if(b.action!=='plan'&&!original)throw new HttpError(404,'Plan unavailable.');
- if(original&&['Completed','Covered this month','Cancelled','Rescheduled'].includes(planState(original,rows,today)))throw new HttpError(409,'This plan is already covered or inactive.');
- if(original){await assertOpen(original.data.Date);statements.push(periodGuard(original.data.Date));}
- if(b.action==='cancel'){if(typeof b.reason!=='string'||b.reason.trim().length<3)throw new HttpError(400,'Enter a cancellation reason.');write(original,{...original!.data,Status:'Cancelled','Plan reason':b.reason.trim().slice(0,1000),'Updated at':now});}
- else{
- if(!validDate(b.date)||b.date<today)throw new HttpError(400,'Choose today or a future date.');await assertOpen(b.date);statements.push(periodGuard(b.date));
- if(b.action==='reschedule'&&(typeof b.reason!=='string'||b.reason.trim().length<3))throw new HttpError(400,'Enter a rescheduling reason.');
- const route=rows.find(r=>r.kind==='Routes'&&r.id===b.routeId);if(!route)throw new HttpError(400,'Select a route.');
- const customers=raw.filter(r=>r.kind==='Customers'&&canRead(owner,r)).filter(r=>{const d=JSON.parse(r.data),routeId=accessRoute(owner,d)||d['Route ID'];return (routeId?routeId===route.id:d.Route===route.data.Name)&&eligibleForPlan(d,b.date)&&(!original||r.id===customerKey(original,rows));});
- if(!customers.length)throw new HttpError(400,'No eligible accessible customers in this route.');if(customers.length>500)throw new HttpError(400,'Route exceeds 500 customers. Split the route before planning.');
- let added=0,skipped=0,rescheduled=0;
- for(const c of customers){const d=JSON.parse(c.data),id='tour:'+owner.email+':'+b.date+':'+c.id;
- const duplicate=rows.some(p=>p.kind==='Tour plan'&&p.assigned_to===owner.email&&p.data.Date===b.date&&customerKey(p,rows)===c.id);if(duplicate){if(original)throw new HttpError(409,'A plan already exists for this customer/date.');skipped++;continue;}
- const earlier=rows.filter(p=>p.kind==='Tour plan'&&p.assigned_to===owner.email&&customerKey(p,rows)===c.id&&p.data.Date<b.date&&!['Completed','Covered this month','Cancelled','Rescheduled'].includes(planState(p,rows,today)));
- const moved:string[]=[];if(original||b.mode!=='separate'){for(const prior of original?[original]:earlier){const locked=await db().prepare('SELECT month FROM period_locks WHERE closed=1 AND month>=? LIMIT 1').bind(prior.data.Date.slice(0,7)).first();if(locked)continue;statements.push(periodGuard(prior.data.Date));write(prior,{...prior.data,Status:'Rescheduled','Rescheduled to':b.date,'Next plan ID':id,'Plan reason':String(b.reason||'Route replanned').slice(0,1000),'Updated at':now});moved.push(prior.data.Date);rescheduled++;}}
- statements.push(db().prepare("INSERT INTO records(id,owner,kind,data,created,assigned_to) VALUES (?,?,'Tour plan',?,?,?)").bind(id,owner.user_id||owner.email,JSON.stringify({Date:b.date,Customer:d.Name,'Customer ID':c.id,Route:route.data.Name,'Route ID':route.id,Status:'Planned',Purpose:'Route visit','Previous planned dates':earlier.map(p=>p.data.Date).join(', '),'Rescheduled from':moved.join(', ')}),now,owner.email));added++;
- }
- statements.push(audit(m,'Tour planned','Tour plan',route.id,null,{date:b.date,email:owner.email,added,skipped,rescheduled},String(b.reason||'Route plan')));await db().batch(statements);return json({ok:true,added,skipped,rescheduled});
- }
- statements.push(audit(m,'Tour cancelled','Tour plan',original!.id,original!.data,{status:'Cancelled'},b.reason));await db().batch(statements);return json({ok:true});
- }
+ if(['plan','reschedule','cancel'].includes(b.action))throw new HttpError(409,'Use the monthly tour programme and Admin-approved date change requests.');
  if(b.action==='status-request'||b.action==='status-set'){
  const c=raw.find(r=>r.kind==='Customers'&&r.id===b.customerId);if(!c||!canRead(m,c))throw new HttpError(403,'Customer unavailable.');if(!customerStatuses.includes(b.status)||typeof b.reason!=='string'||b.reason.trim().length<3)throw new HttpError(400,'Choose a customer status and enter a reason.');if(b.status==='Temporarily unavailable'&&(!validDate(b.resume)||b.resume<=today))throw new HttpError(400,'Choose a future resume date.');
  const body={name:JSON.parse(c.data).Name,status:b.status,reason:b.reason.slice(0,1000),resume:b.status==='Temporarily unavailable'?b.resume:'',routeId:b.routeId||''};

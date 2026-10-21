@@ -5,6 +5,10 @@ const fs=require('node:fs');
 const path=require('node:path');
 const ts=require('typescript');
 const root=path.resolve(__dirname,'..');
+const NativeDate=Date,clockSeed=new NativeDate();clockSeed.setUTCMonth(clockSeed.getUTCMonth()+1,1);clockSeed.setUTCHours(6,0,0,0);while(clockSeed.getUTCDay()!==3)clockSeed.setUTCDate(clockSeed.getUTCDate()+1);if(clockSeed.toISOString().slice(5,10)==='10-02')clockSeed.setUTCDate(clockSeed.getUTCDate()+7);
+const initialClockOffset=clockSeed.getTime()-NativeDate.now();let clockOffset=initialClockOffset;
+global.Date=new Proxy(NativeDate,{construct(target,args){return Reflect.construct(target,args.length?args:[NativeDate.now()+clockOffset]);},apply(){return new NativeDate(NativeDate.now()+clockOffset).toString()},get(target,key){return key==='now'?()=>NativeDate.now()+clockOffset:Reflect.get(target,key)}});
+
 const sql=new DatabaseSync(':memory:');
 sql.exec(fs.readFileSync(path.join(root,'tests/fixtures/drizzle/0000_medical_omega_flight.sql'),'utf8'));
 sql.prepare('INSERT INTO records VALUES (?,?,?,?,?)').run('legacy','owner-user','Customers',JSON.stringify({Name:'Legacy customer'}),'2026-10-01');
@@ -126,6 +130,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  const checkin=await post('Attendance',attend('Check in'));
  await ok(await records.POST(request({kind:'Attendance',data:attend('Check in')})),409);
  await ok(await records.POST(request({kind:'Attendance',id:checkin.id,data:attend('Check out')})),403);
+ await require('./monthly-tour-integration.cjs')({load,root,sql,ok,request,records,fieldDate,owner,alice,bob,r1,r2,r3,shared,assigned,who:u=>{identity=u},setClock:iso=>{clockOffset=iso?NativeDate.parse(iso)-NativeDate.now():initialClockOffset}});
  const visit=await post('Visits',{Customer:'Shared doctor',Date:fieldDate,Purpose:'Order'});
  const commerce=load(path.join(root,'app/api/commerce/route.ts')),benefits=load(path.join(root,'app/api/benefits/route.ts')),closeVisit=load(path.join(root,'app/api/visits/close/route.ts')),whatsapp=load(path.join(root,'app/api/whatsapp/route.ts'));
  const invoice=(kind,stockistId,lines,extra={})=>{const quotes=kind==='secondary'?[]:lines.map(l=>load(path.join(root,'lib/field-rules.ts')).priceLine(JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(l.productId).data),l.productId,l.qty,l.scheme||'none',true));return {id:crypto.randomUUID(),kind,stockistId,date:fieldDate,...(kind!=='secondary'?{invoiceValue:quotes.reduce((n,l)=>n+l.subtotal,0)/100}:{}),lines:lines.map((l,i)=>kind==='secondary'?l:{...l,freeQty:quotes[i].free,batch:'TEST-BATCH',expiry:'2035-12-31'}),...extra}};
@@ -241,7 +246,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  await ok(await access.POST(request({customerId:ownBob.id,email:bob.email,action:'grant',routeId:r2.id,reason:'Coverage approved'})));identity=bob;rows=(await ok(await records.GET())).records;assert(rows.some(r=>r.id===ownBob.id));assert(!('Blocked MRs' in rows.find(r=>r.id===ownBob.id).data));
  identity=owner;await ok(await access.POST(request({customerId:shared.id,email:bob.email,action:'revoke',reason:'Shared route exception'})));identity=bob;assert(!(await ok(await records.GET())).records.some(r=>r.id===shared.id));identity=owner;await ok(await access.POST(request({customerId:shared.id,email:bob.email,action:'grant',routeId:r1.id,reason:'Shared route restored'})));assert.equal(sql.prepare("SELECT COUNT(*) AS n FROM records WHERE kind='Customers'").get().n,beforeAccessCount);
  const missingReasonProduct=JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(product.id).data);auditBefore=auditCount();await ok(await records.POST(request({kind:'Products',id:product.id,data:{...missingReasonProduct,PTR:'999'}})),400);assert.equal(auditCount(),auditBefore);
- const history=await ok(await hub.GET(hubURL('mode=audit')));assert(history.events.some(e=>e.action==='Customer access revoked'&&e.reason==='Territory reassigned'&&e.actor_email===owner.email));assert(history.events.some(e=>e.action==='Order repricing approved'));assert(history.events.some(e=>e.action==='Month reopened'));assert(history.events.every(e=>e.actor_email===owner.email&&e.reason&&e.created));
+ const history=await ok(await hub.GET(hubURL('mode=audit')));assert(history.events.some(e=>e.action==='Customer access revoked'&&e.reason==='Territory reassigned'&&e.actor_email===owner.email));assert(history.events.some(e=>e.action==='Order repricing approved'));assert(history.events.some(e=>e.action==='Month reopened'));assert(history.events.every(e=>(e.actor_email===owner.email||e.entity_kind==='Tour plan'&&[alice.email,bob.email].includes(e.actor_email))&&e.reason&&e.created));
  const impact=load(path.join(root,'lib/approval-preview.ts')).stockImpact,previous=[{productId:'p',name:'P',qty:10,free:2}],proposed=[{productId:'p',name:'P',qty:5,free:1},{productId:'q',name:'Q',qty:2,free:0}],balances=[{stockist_id:'s',product_id:'p',quantity:50,reserved:15},{stockist_id:'s',product_id:'q',quantity:10,reserved:0}];
  let deltas=impact({stockist_id:'s',status:'Placed',items:JSON.stringify(previous)},proposed,balances);assert.equal(deltas[0].physicalAfter,50);assert.equal(deltas[0].reservedAfter,9);assert.equal(deltas[0].availableAfter,41);assert.equal(deltas[1].availableAfter,8);
  deltas=impact({stockist_id:'s',status:'Delivered',items:JSON.stringify(previous)},[],balances);assert.equal(deltas[0].physicalAfter,62);assert.equal(deltas[0].availableAfter,47);
@@ -385,26 +390,24 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  sql.prepare("UPDATE members SET status='active',route_ids=?,stockist_ids=? WHERE email=?").run(JSON.stringify([r1.id,r3.id]),JSON.stringify([s1.id,s2.id]),alice.email);
  sql.exec('DELETE FROM period_locks');identity=alice;
  await ok(await planning.POST(request({action:'leave',from:fieldDate,to:fieldDate,reason:'Personal leave'})));
- const leaveRequest=sql.prepare("SELECT * FROM workflow_requests WHERE kind='leave' AND mr_email=?").get(alice.email);
+ const leaveRequest=sql.prepare("SELECT * FROM workflow_requests WHERE kind='tour_change' AND status='Pending' AND mr_email=?").get(alice.email);
  await ok(await planning.POST(request({action:'leave',from:fieldDate,to:fieldDate,reason:'Overlapping leave'})),409);
  await ok(await planning.POST(request({action:'approve',id:leaveRequest.id})),403);
  identity=owner;await ok(await planning.POST(request({action:'approve',id:leaveRequest.id})));
  identity=alice;const mineAttendance=await ok(await attendanceAPI.GET(new Request('https://app.test/api/attendance?month='+fieldDate.slice(0,7))));assert(mineAttendance.attendance.every(m=>m.email===alice.email));assert(mineAttendance.attendance[0].days.find(d=>d.date===fieldDate).working);assert(mineAttendance.attendance[0].days.find(d=>d.date===fieldDate).label.includes('approved leave'));
  const future=new Date(Date.now()+86400000).toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
- await ok(await planning.POST(request({action:'leave',from:future,to:future,reason:'Family leave'})));const futureLeave=sql.prepare("SELECT * FROM workflow_requests WHERE kind='leave' AND status='Pending'").get();identity=owner;await ok(await planning.POST(request({action:'approve',id:futureLeave.id})));identity=alice;const futureCal=await ok(await attendanceAPI.GET(new Request('https://app.test/api/attendance?month='+future.slice(0,7))));assert.equal(futureCal.attendance[0].days.find(d=>d.date===future).status,'leave');
- await ok(await planning.POST(request({action:'cancel',id:futureLeave.id})));
+ await ok(await planning.POST(request({action:'leave',from:future,to:future,reason:'Family leave'})));const futureLeave=sql.prepare("SELECT * FROM workflow_requests WHERE kind='tour_change' AND status='Pending'").get();identity=owner;await ok(await planning.POST(request({action:'approve',id:futureLeave.id})));identity=alice;const futureCal=await ok(await attendanceAPI.GET(new Request('https://app.test/api/attendance?month='+future.slice(0,7))));assert.equal(futureCal.attendance[0].days.find(d=>d.date===future).status,'leave');
+ await ok(await planning.POST(request({action:'cancel',id:futureLeave.id})),409);
+ const monthlyTours=load(path.join(root,'app/api/monthly-tour/route.ts'));
+ const returnFromLeave=await ok(await monthlyTours.POST(request({action:'request-change',type:'routes',from:future,routes:[r1.id,r3.id],reason:'Return to route work'})));
+ identity=owner;await ok(await monthlyTours.POST(request({action:'approve-change',id:returnFromLeave.id})));identity=alice;
+ const returnToday=await ok(await monthlyTours.POST(request({action:'request-change',type:'routes',from:fieldDate,routes:[r1.id,r3.id],reason:'Continue approved route work'})));identity=owner;await ok(await monthlyTours.POST(request({action:'approve-change',id:returnToday.id})));identity=alice;
+
  const outsideRequest=sql.prepare("SELECT * FROM workflow_requests WHERE kind='outside_customer' AND mr_email=?").get(alice.email);identity=owner;await ok(await planning.POST(request({action:'approve',id:outsideRequest.id})));identity=alice;const outsideCustomer=(await ok(await records.GET())).records.find(r=>r.data.Name==='Wrong route');assert(outsideCustomer);assert(!outsideCustomer.data['Outside route MRs']);
  const tours=load(path.join(root,'app/api/tour-planning/route.ts'));
- await ok(await tours.POST(request({action:'plan',date:fieldDate,routeId:r2.id})));const planCount=sql.prepare("SELECT COUNT(*) AS n FROM records WHERE kind='Tour plan'").get().n;await ok(await tours.POST(request({action:'plan',date:fieldDate,routeId:r2.id})));assert.equal(sql.prepare("SELECT COUNT(*) AS n FROM records WHERE kind='Tour plan'").get().n,planCount);
+ await ok(await tours.POST(request({action:'plan',date:fieldDate,routeId:r2.id})),409);
+ await ok(await tours.POST(request({action:'reschedule',id:'legacy-plan',date:fieldDate,routeId:r2.id,reason:'Customer unavailable'})),409);
  await ok(await planning.POST(request({action:'tour',date:fieldDate,routeId:r2.id,customers:[own.id]})),400);
- const originalPlan=sql.prepare("SELECT * FROM records WHERE kind='Tour plan' AND assigned_to=? AND json_extract(data,'$.\"Customer ID\"')=?").get(alice.email,outsideCustomer.id);
- const tomorrow=new Date(Date.parse(fieldDate+'T00:00:00Z')+86400000).toISOString().slice(0,10);
- await ok(await tours.POST(request({action:'reschedule',id:originalPlan.id,date:tomorrow,routeId:r2.id,reason:'Customer unavailable'})));
- assert.equal(JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(originalPlan.id).data).Status,'Rescheduled');
- const movedPlan=sql.prepare("SELECT * FROM records WHERE kind='Tour plan' AND assigned_to=? AND json_extract(data,'$.Date')=?").get(alice.email,tomorrow);
- identity=bob;await ok(await tours.POST(request({action:'cancel',id:movedPlan.id,reason:'Not my plan'})),404);
- identity=alice;await ok(await tours.POST(request({action:'cancel',id:movedPlan.id,reason:'Customer not available'})));
- assert.equal(JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(movedPlan.id).data).Status,'Cancelled');
  await ok(await tours.POST(request({action:'status-request',customerId:outsideCustomer.id,status:'Relocated — route change required',reason:'Moved to another town'})));
  assert.equal(JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(outsideCustomer.id).data)['Customer status'],undefined);
  const sr=sql.prepare("SELECT id FROM workflow_requests WHERE kind='customer_status' AND record_id=?").get(outsideCustomer.id);
@@ -418,7 +421,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  await ok(await tours.POST(request({action:'plan',email:alice.email,date:nextPlanDate,routeId:r2.id})),409);sql.exec('DELETE FROM period_locks');
  const tourLogic=load(path.join(root,'lib/tour-planning.ts'));const fixture=[{id:'p',kind:'Tour plan',assigned_to:alice.email,data:{Date:'2026-10-08','Customer ID':'c',Customer:'Example',Status:'Cancelled'}},{id:'v',kind:'Visits',assigned_to:alice.email,data:{Date:'2026-10-15','Customer ID':'c',Customer:'Example',Status:'Closed'}}];
  assert.equal(tourLogic.planState(fixture[0],[fixture[0]],'2026-10-16'),'Cancelled');assert.equal(tourLogic.planState(fixture[0],fixture,'2026-10-16'),'Covered this month');assert.equal(tourLogic.tourReport(alice.email,'2026-10',fixture).rows[0][2],'Visited / Covered');assert.equal(tourLogic.tourReport(alice.email,'2026-10',[fixture[0]]).rows[0][2],'Not visited');assert.equal(tourLogic.eligibleForPlan({'Customer status':'Temporarily unavailable','Resume date':'2026-10-15'},'2026-10-14'),false);assert.equal(tourLogic.eligibleForPlan({'Customer status':'Temporarily unavailable','Resume date':'2026-10-15'},'2026-10-15'),true);
- console.log('PASS: tour duplicate prevention, reschedule history, cancellation ownership, status approval, reactivation route, month lock and completed-only coverage.');
+ console.log('PASS: legacy tour writes blocked, customer status approval, reactivation route, month lock and completed-only coverage.');
  identity=alice;
 
  const updates=load(path.join(root,'lib/field-updates.ts'));

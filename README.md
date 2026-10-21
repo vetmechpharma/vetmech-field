@@ -1,5 +1,7 @@
 # VETMECH Field — GitHub and VPS package
 
+Monthly tour planning now requires Admin approval before MR visits. See **[MONTHLY-TOUR-PROGRAMME.md](MONTHLY-TOUR-PROGRAMME.md)** for holiday setup, date changes and VPS update steps.
+
 Start with **[INSTALL-GITHUB.md](INSTALL-GITHUB.md)** for the complete setup.
 
 For the new gateway and mandatory order approval, see **[WHATSAPP-ORDER-APPROVAL.md](WHATSAPP-ORDER-APPROVAL.md)**, including the existing VPS update commands.

@@ -1,3 +1,4 @@
+import {expandProgrammes} from '../../../lib/monthly-tour';
 import {mrReport} from '../../../lib/benefit-visibility';
 import {periodGuard,assertOpen} from '../../../lib/periods';
 import {routeInsights,shiftMonth} from '../../../lib/route-insights';
@@ -9,7 +10,7 @@ export async function GET(req:Request){try{const viewer=await member(),q=new URL
  const email=q.get('mr')||viewer.email;if(viewer.role!=='admin'&&email!==viewer.email)throw new HttpError(403,'You can view only your own report.');
  const closed=await db().prepare('SELECT closure_id,updated FROM period_locks WHERE month=? AND closed=1').bind(month).first<{closure_id:string;updated:string}>();if(closed){const archives=(await db().prepare('SELECT mr_email,report FROM period_reports WHERE closure_id=?').bind(closed.closure_id).all<{mr_email:string;report:string}>()).results.filter(r=>viewer.role==='admin'||r.mr_email===viewer.email);if(q.get('summary')==='1')return json({month,summaries:archives.map(r=>JSON.parse(r.report)[viewer.role].summary),closed:true});const saved=archives.find(r=>r.mr_email===email);if(!saved)throw new HttpError(404,'No archived report for this MR.');const archived=JSON.parse(saved.report)[viewer.role];return json(viewer.role==='admin'?archived:mrReport(archived));}
  const [rs,is,ms]=await Promise.all([db().prepare('SELECT * FROM records').all<Row>(),db().prepare('SELECT * FROM invoices').all<Row>(),db().prepare("SELECT * FROM members WHERE role='mr'").all<Member>()]);
- const records=rs.results.map(r=>({...r,data:JSON.parse(r.data)})),invoices=is.results.map(i=>({...i,items:JSON.parse(i.items)})),reps=ms.results.filter(m=>viewer.role==='admin'||m.email===viewer.email);
+ const records=expandProgrammes(rs.results.map(r=>({...r,data:JSON.parse(r.data)})) as any),invoices=is.results.map(i=>({...i,items:JSON.parse(i.items)})),reps=ms.results.filter(m=>viewer.role==='admin'||m.email===viewer.email);
  if(q.get('summary')==='1')return json({month,summaries:reps.map(m=>totals(m,month,records,invoices))});
  const mr=reps.find(m=>m.email===email);if(!mr)throw new HttpError(404,'Choose a representative.');
  const [sm,bm,cm]=await Promise.all([db().prepare('SELECT * FROM stock_movements').all<Row>(),db().prepare('SELECT * FROM benefit_movements WHERE mr_email=?').bind(mr.email).all<Row>(),db().prepare('SELECT * FROM commitments WHERE mr_email=?').bind(mr.email).all<Row>()]);

@@ -15,7 +15,7 @@
     "data:export": "node scripts/export-sqlite.mjs",
     "data:import": "node --env-file=.env scripts/import-mongo.mjs",
     "test:mongo": "node tests/mongo-integration.cjs",
-    "test:ui": "node tests/workspace-render.cjs",
+    "test:ui": "node tests/workspace-render.cjs && node tests/monthly-tour-ui.cjs",
     "test:security": "node tests/http-security.cjs",
     "test:domain": "node tests/product-csv.cjs && node tests/batch-closing.cjs && node tests/order-communications.cjs"
   },
