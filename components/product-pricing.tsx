@@ -1,0 +1,91 @@
+'use client';
+import {formatPrice as money, withGST, effectiveRates, hasPricingMargins, previewProductPricing, productScheme, profitOnCost, schemeLabel, schemeSlots, type ProductData} from '../lib/product-pricing';
+import type {PricedLine} from '../lib/field-rules';
+
+function RatePair({label, exGST, inclGST, tone = 'ptr'}: {label: string; exGST: number | null; inclGST: number | null; tone?: string}) {
+  return <div className={`pricing-pair pricing-${tone}`}>
+    <h4>{label}</h4>
+    <div><span>Excl. GST</span><strong>{exGST === null ? '—' : money(exGST)}</strong></div>
+    <div className="pricing-tax"><span>Incl. GST</span><strong>{inclGST === null ? '—' : money(inclGST)}</strong></div>
+  </div>;
+}
+function Profit({pts, cost}: {pts: number; cost?: string}) {
+  const profit = profitOnCost(pts, cost);
+  return <div className={`pricing-profit ${profit && profit.amount < 0 ? 'pricing-loss' : ''}`}>
+    <span>Profit / supplied unit</span><strong>{profit ? money(profit.amount) : '—'}</strong>
+    <span>Profit % on landing cost</span><strong>{profit?.percent == null ? 'Unavailable' : `${profit.percent.toFixed(2)}%`}</strong>
+    {!profit && <small>Enter landing cost to calculate profit.</small>}
+    {profit?.percent === null && <small>Percentage is unavailable for zero cost.</small>}
+    {profit && profit.amount < 0 && <small>Below landing cost</small>}
+  </div>;
+}
+export function ProductPricing({value, onChange, admin, existing = false}: {value: ProductData; onChange: (v: ProductData) => void; admin: boolean; existing?: boolean}) {
+  const preview = previewProductPricing(value), data = preview.data, gst = Number(data['GST %'] || 0);
+  const ptr = !preview.error && data.PTR?.trim() ? Number(data.PTR) : null;
+  const pts = !preview.error && data.PTS?.trim() ? Number(data.PTS) : null;
+  const change = (key: string, v: string) => {
+    const next = {'GST %': '0', ...value, [key]: v};
+    const result = previewProductPricing(next);
+    onChange(!result.error && hasPricingMargins(next) ? result.data : next);
+  };
+  return <section className="full-field product-pricing" aria-label="Product pricing">
+    <h3>Product pricing</h3>
+    {admin && <div className="form-grid pricing-inputs">
+      <label>MRP · incl. GST (₹)<input required type="number" min="0" max="10000000" step="0.01" value={value.MRP || ''} onChange={e => change('MRP', e.target.value)}/></label>
+      <label>GST %<input required type="number" min="0" max="100" step="0.01" value={value['GST %'] ?? '0'} onChange={e => change('GST %', e.target.value)}/></label>
+      <label>Retail margin %<input required={!existing || hasPricingMargins(value)} type="number" min="0" max="100" step="0.01" value={value['Retail margin %'] ?? ''} onChange={e => change('Retail margin %', e.target.value)}/></label>
+      <label>Stockist margin %<input required={!existing || hasPricingMargins(value)} type="number" min="0" max="100" step="0.01" value={value['Stockist margin %'] ?? ''} onChange={e => change('Stockist margin %', e.target.value)}/></label>
+      <label className="pricing-cost-input">Landing cost / unit · excl. GST (₹)<input type="number" min="0" max="10000000" step="0.01" value={value['Landing cost'] ?? ''} onChange={e => change('Landing cost', e.target.value)}/><small>Cost of one packed unit, including units supplied free.</small></label>
+    </div>}
+    {preview.error && <p className="field-help" role="status">{preview.error}</p>}
+    {admin && existing && !hasPricingMargins(value) && <p className="field-help">Saved rates retained. Enter both margins to calculate new rates from MRP.</p>}
+    <div className="pricing-grid" aria-live="polite">
+      <RatePair label="PTR / unit" exGST={ptr} inclGST={ptr === null ? null : withGST(ptr, gst)}/>
+      {admin && <RatePair label="PTS / unit" exGST={pts} inclGST={pts === null ? null : withGST(pts, gst)} tone="pts"/>}
+      {admin && pts !== null && <Profit pts={pts} cost={value['Landing cost']}/>}
+    </div>
+    {admin && <p className="field-help">MRP ÷ GST factor → deduct retail margin → deduct stockist margin. Rates save to 2 decimals. Profit is before other business expenses.</p>}
+  </section>;
+}
+
+export function SchemePricing({value, slot, admin}: {value: ProductData; slot: number; admin: boolean}) {
+  const preview = previewProductPricing(value);
+  if (preview.error) return <p className="field-help">Complete product pricing to see scheme rates.</p>;
+  let scheme; try { scheme = productScheme(value, slot); } catch { return <p className="field-help">Complete this scheme to see its net rates.</p>; }
+  const gst = Number(preview.data['GST %'] || 0);
+  const ptr = preview.data.PTR?.trim() ? effectiveRates(Number(preview.data.PTR), gst, scheme.paid, scheme.free, scheme.discount) : null;
+  const pts = preview.data.PTS?.trim() ? effectiveRates(Number(preview.data.PTS), gst, scheme.paid, scheme.free, scheme.discount) : null;
+  return <div className="scheme-pricing">
+    <p className="pricing-caption">{scheme.label} · net rate per supplied unit{scheme.free ? ` (${scheme.paid} paid + ${scheme.free} free)` : ''}</p>
+    <div className="pricing-grid">
+      <RatePair label="Net PTR" exGST={ptr?.exGST ?? null} inclGST={ptr?.inclGST ?? null}/>
+      {admin && <RatePair label="Net PTS" exGST={pts?.exGST ?? null} inclGST={pts?.inclGST ?? null} tone="pts"/>}
+      {admin && pts && <Profit pts={pts.exGST} cost={value['Landing cost']}/>}
+    </div>
+  </div>;
+}
+
+export function ProductPriceCell({data, field, admin}: {data: ProductData; field: string; admin: boolean}) {
+  if (field === 'Scheme') {
+    const slots = schemeSlots.filter(i => data[`Scheme ${i} enabled`] === 'Yes');
+    return slots.length ? <details className="catalogue-scheme-rates"><summary>{slots.map(i => schemeLabel(data, i)).join(' / ')}<small>View net rates{admin ? ' & profit' : ''}</small></summary>{slots.map(slot => <SchemePricing key={slot} value={data} slot={slot} admin={admin}/>)}</details> : <>No scheme</>;
+  }
+  if (field === 'GST %') return <>{data[field] || '0'}%</>;
+  if (field === 'PTR' || field === 'PTS') {
+    const rate = data[field]?.trim() ? Number(data[field]) : null;
+    return <div className={`catalogue-rate pricing-${field.toLowerCase()}`}><b>{rate === null ? '—' : money(rate)} <small>excl. GST</small></b><span>{rate === null ? '—' : money(withGST(rate, Number(data['GST %'] || 0)))} incl. GST</span></div>;
+  }
+  if (field === 'Landing cost') return admin ? <span className="catalogue-cost">{data[field]?.trim() ? money(Number(data[field])) : '—'}<small>excl. GST / unit</small></span> : null;
+  if (field === 'MRP') return <>{money(Number(data.MRP || 0))}<small>incl. GST</small></>;
+  return <>{data[field] || '—'}</>;
+}
+
+export function OrderNetRates({line, proposed = false, saved = false}: {line: PricedLine; proposed?: boolean; saved?: boolean}) {
+  const units = line.qty + line.free;
+  return <section className="order-net-rates" aria-label="Order net rates" aria-live="polite">
+    <div className="pricing-grid"><RatePair label={proposed ? 'Proposed net / supplied unit' : 'Net / supplied unit'} exGST={units > 0 ? line.subtotal / 100 / units : null} inclGST={units > 0 ? line.total / 100 / units : null}/></div>
+    <p>{saved ? 'Saved' : 'Order'} base: <b>{money((line.baseRate ?? line.rate) / 100)}</b> / paid unit excl. GST · Before scheme discount</p>
+    <p>{line.qty} paid + {line.free} free = {units} units · GST {line.gst}%{line.schemeDiscount ? ` · ${line.schemeDiscount}% discount` : ''}</p>
+    <p>Line total: <b>{money(line.subtotal / 100)}</b> excl. GST · <b>{money(line.total / 100)}</b> incl. GST{proposed ? ' · Subject to Admin approval' : ''}</p>
+  </section>;
+}

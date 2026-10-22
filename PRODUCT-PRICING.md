@@ -1,0 +1,80 @@
+# Product pricing and scheme net rates
+
+## Admin setup
+
+Open **Products & pricing → Add / Edit product**. Enter the GST-inclusive MRP,
+GST percentage, retail margin and stockist margin. The calculator saves PTR and
+PTS excluding GST and displays both rates with and without GST.
+
+- Net MRP = MRP ÷ (1 + GST / 100)
+- PTR = Net MRP × (1 − retail margin / 100)
+- PTS = Net MRP × (1 − retail margin / 100) × (1 − stockist margin / 100)
+
+Both margins are deductions. PTS uses the unrounded calculation; the two standard
+rates are rounded to paise when saved. GST percentages are supplied by Admin.
+
+Enter **Landing cost / unit · excl. GST** for one packed saleable unit. This is a
+separate field from sample-allocation cost. Landing cost is removed from MR API
+responses and exports. Profit is calculated for Admin only and is not sent in
+orders or customer messages.
+
+Existing catalogue products retain their saved rates until Admin enters both
+margins. Enabling the MRP calculator makes the calculated PTR the order base,
+replacing any legacy retail-offer-rate override. A reason is required when editing
+product pricing. Existing orders keep their saved base price, GST and selected
+scheme terms unless Admin approves repricing.
+
+## Schemes
+
+Each product supports up to 20 alternatives: **Buy + free** (10 + 3, for example)
+or **Discount** (5%, for example). Select one scheme or No scheme on an order.
+The scheme preview shows net PTR and PTS with and without GST, alongside profit
+per supplied unit and profit percentage on landing cost.
+
+For 10 + 3, net rate = 10 billed units × unit rate ÷ 13 supplied units.
+Cost applies to all 13 units, including the free units.
+
+- Profit / unit = effective PTS excluding GST − landing cost / unit
+- Profit % on cost = profit / unit ÷ landing cost / unit × 100
+
+Missing cost shows unavailable profit. Zero cost shows unavailable percentage.
+Negative profit appears as a loss. These are product-cost calculations before
+other business expenses.
+
+Example: MRP ₹105, GST 5%, retail margin 20%, stockist margin 10% gives PTR ₹80
+excluding GST (₹84 including GST) and PTS ₹72 excluding GST (₹75.60 including GST).
+At 10 + 3 and landing cost ₹40, effective PTS is ₹55.38 excluding GST / ₹58.15
+including GST. Profit is ₹15.38 per supplied unit, or 38.46% on cost.
+
+## MR order display
+
+Product, scheme and quantity selections immediately update net rates. Free units
+are earned per complete buy group: 11 paid units on 10 + 3 supply 14 units, not
+14.3. Effective order rates use the actual billed totals divided by actual supplied
+units. Percentage discounts round the paid-unit rate to paise; GST rounds on the
+line total. The effective unit rate is displayed to two decimals and is not used
+to recalculate the invoice total.
+
+Direct-company proposed rates are excluding GST and before any selected
+percentage discount. Departures from approved pricing still require Admin
+approval. Approval previews and order edits use the same calculation as the order
+form. No scheme-specific net rate overwrites the standard catalogue PTR or PTS.
+
+Blue identifies PTR, purple identifies PTS, teal identifies GST-inclusive rates,
+green identifies profit and red identifies loss. Text labels accompany colours.
+
+## CSV and deployment
+
+Product export and the import template include GST, both margins, landing cost
+and both GST-inclusive rates. Use `10+3; 5%` to import scheme alternatives.
+Derived PTR/PTS recalculate from the margins; imported inclusive-rate columns are
+informational. Original six-column CSV files remain supported. Missing new columns
+preserve existing pricing metadata. A blank offer list removes all schemes.
+
+Deploy with the existing `/usr/local/sbin/vetmech-deploy` command after GitHub checks
+pass. These fields use existing product and invoice JSON; no database migration,
+new environment variable or Nginx change is required.
+
+Automated checks cover calculator boundaries, exact half-paise rounding, free-unit
+and percentage schemes, profit/loss, CSV compatibility, MR cost privacy, server-side
+recalculation, direct proposals, saved-order price preservation and UI input changes.

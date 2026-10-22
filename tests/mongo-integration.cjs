@@ -699,6 +699,25 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  await ok(await commerce.PATCH(request({id:zeroOrder.id,revision:2,requestId:crypto.randomUUID(),action:'status',status:'Cancelled',reason:'Customer withdrew request'})));assert(!sql.prepare('SELECT id FROM stock_reservations WHERE order_id=?').get(zeroOrder.id));
  console.log('PASS: expired/zero/insufficient stock does not block product orders or Admin approvals; PTS/PTR visible with costs private; company special rate review; partial replenishment; truthful shortages; company completion alone enforces unexpired stock, idempotency and source isolation.');
 
+ // Calculator fields are server-validated and landing cost never reaches MR responses.
+ identity=owner;
+ const pricingData={Name:'GST pricing test',Pack:'100 ml',MRP:'105','GST %':'5','Retail margin %':'20','Stockist margin %':'10','Landing cost':'40',PTR:'999',PTS:'999','Scheme 1 enabled':'Yes','Scheme 1 paid':'10','Scheme 1 free':'3','Scheme 2 enabled':'Yes','Scheme 2 type':'Discount','Scheme 2 discount %':'5'};
+ const pricingProduct=await post('Products',pricingData);let pricedData=JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(pricingProduct.id).data);
+ assert.equal(pricedData.PTR,'80.00');assert.equal(pricedData.PTS,'72.00');assert.equal(pricedData['Landing cost'],'40');
+ await ok(await records.POST(request({kind:'Products',data:{...pricingData,Name:'Invalid pricing test','GST %':'101'}})),400);
+ await ok(await records.POST(request({kind:'Products',data:{...pricingData,Name:'Invalid cost test','Landing cost':'-1'}})),400);
+ identity=alice;let publicPrice=(await ok(await records.GET())).records.find(p=>p.id===pricingProduct.id);assert.equal(publicPrice.data.PTR,'80.00');assert(!('Landing cost' in publicPrice.data));
+ await ok(await records.POST(request({kind:'Products',id:pricingProduct.id,data:{...pricingData,PTR:'1'}})),403);
+ const schemeOrder=invoice('secondary',s1.id,[{productId:pricingProduct.id,qty:10,scheme:'1'}],{customerId:messageCustomer.id});await ok(await commerce.POST(request(schemeOrder)));
+ let pricedOrder=sql.prepare('SELECT * FROM invoices WHERE id=?').get(schemeOrder.id);let pricedLine=JSON.parse(pricedOrder.items)[0];assert.equal(pricedLine.subtotal,80000);assert.equal(pricedLine.total,84000);assert.equal(pricedLine.free,3);assert(!JSON.stringify(pricedLine).includes('Landing cost'));
+ const discountOrder=invoice('secondary',s1.id,[{productId:pricingProduct.id,qty:10,scheme:'2'}],{customerId:messageCustomer.id});await ok(await commerce.POST(request(discountOrder)));
+ const discountLine=JSON.parse(sql.prepare('SELECT items FROM invoices WHERE id=?').get(discountOrder.id).items)[0];assert.equal(discountLine.rate,7600);assert.equal(discountLine.total,79800);
+ identity=owner;await post('Products',{...pricingData,MRP:'210','Scheme 2 discount %':'20'},{id:pricingProduct.id});
+ identity=alice;await ok(await commerce.PATCH(request({id:discountOrder.id,revision:1,requestId:crypto.randomUUID(),lines:[{productId:pricingProduct.id,qty:12,scheme:'2'}],notes:'Quantity correction'})));
+ const preservedPrice=JSON.parse(sql.prepare('SELECT items FROM invoices WHERE id=?').get(discountOrder.id).items)[0];assert.equal(preservedPrice.rate,7600);assert.equal(preservedPrice.schemeDiscount,5);assert.equal(preservedPrice.total,95760);
+ identity=owner;assert.equal((await ok(await records.GET())).records.find(p=>p.id===pricingProduct.id).data['Landing cost'],'40');
+ console.log('PASS: product calculator API validation, derived-price tamper resistance, MR cost isolation, scheme order totals and unchanged saved prices after catalogue updates.');
+
  if(process.env.MONGO_TEST_MODE!=='model'){
   const native=load(path.join(root,'lib/mongo/database.ts')).mongoDatabase;
   const {physicalStockGuard}=load(path.join(root,'lib/order-stock.ts'));

@@ -17,7 +17,7 @@
     "test:mongo": "node tests/mongo-integration.cjs",
     "test:ui": "node tests/workspace-render.cjs && node tests/monthly-tour-ui.cjs",
     "test:security": "node tests/http-security.cjs",
-    "test:domain": "node tests/product-csv.cjs && node tests/batch-closing.cjs && node tests/order-communications.cjs"
+    "test:domain": "node tests/product-pricing.cjs && node tests/product-csv.cjs && node tests/batch-closing.cjs && node tests/order-communications.cjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
