@@ -21,10 +21,10 @@ export function ViewTools({title,nativePrint=false,disabled=false}:{title:string
     } catch(e) {setError(true);setMessage((e as Error).message)} finally {setBusy(false)}
   }
   return <section className="view-tools no-print" aria-label="Print and export current view">
-    <span className="view-tools-context"><Filter size={15} aria-hidden="true"/>Current selection · loaded records</span>
+    <span className="view-tools-context"><Filter size={15} aria-hidden="true"/>Current view · loaded records</span>
     <div className="view-tools-actions">
       {!nativePrint && <button type="button" className="secondary" disabled={disabled||busy} onClick={()=>run('print')}><Printer size={17}/>Print / PDF</button>}
-      <button type="button" className="secondary" disabled={disabled||busy} onClick={()=>run('csv')}>{busy?<LoaderCircle className="spin" size={17}/>:<Download size={17}/>}Export view (CSV)</button>
+      <button type="button" className="secondary" disabled={disabled||busy} onClick={()=>run('csv')}>{busy?<LoaderCircle className="spin" size={17}/>:<Download size={17}/>}Export CSV</button>
     </div>
     {message && <p role={error?'alert':'status'} className={`view-tools-message${error?' error':''}`}>{message}</p>}
   </section>;
