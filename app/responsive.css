@@ -381,3 +381,8 @@
 .order-net-rates .scheme-quantity-note>span{flex:1 1 240px;min-width:0;overflow-wrap:anywhere}
 .order-net-rates .below-scheme-minimum{background:#fff4df;color:#805000}
 .order-net-rates .scheme-quantity-note button{min-height:44px;white-space:normal}
+.custom-scheme-fields{grid-column:1/-1;padding:12px;border:1px solid #c6d9ef;border-radius:10px;background:#eff6ff;min-width:0}
+.custom-scheme-quantities{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.custom-scheme-fields small{display:block;margin-top:8px;color:#315779}
+.custom-scheme-quantities input{min-height:44px;width:100%}
+@media(max-width:440px){.custom-scheme-quantities{grid-template-columns:1fr}}

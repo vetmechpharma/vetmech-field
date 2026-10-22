@@ -733,6 +733,65 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  console.log('PASS: primary catalogue scheme validation and snapshots, independent bulk/free stock, invoice totals and Admin-only stockist offers in live and printable MR data.');
 
 
+ // Custom schemes are reviewed before an invoice can enter the order approval queue.
+ identity=owner;
+ const customProductData={Name:'Custom offer product',Pack:'100 ml',MRP:'105',PTR:'80',PTS:'72','GST %':'5'};
+ const customProduct=await post('Products',customProductData),customSecond=await post('Products',{Name:'Standard companion product',Pack:'Box',MRP:'60',PTR:'50',PTS:'40'});
+ for(const source of [s1.id,'company-stock'])await ok(await commerce.POST(request(invoice(source==='company-stock'?'company_receipt':'primary',source,[{productId:customProduct.id,qty:100},{productId:customSecond.id,qty:50}]))));
+ const customOrder=()=>invoice('secondary',s1.id,[{productId:customProduct.id,qty:20,scheme:'other',customPaid:10,customFree:4},{productId:customSecond.id,qty:2,scheme:'none'}],{customerId:messageCustomer.id,notes:'Special bulk offer requested'});
+ const agencyMessages=id=>sql.prepare('SELECT * FROM whatsapp_outbox WHERE visit_id LIKE ?').all('order:'+id+':agency:%');
+ const getOrder=id=>sql.prepare('SELECT * FROM invoices WHERE id=?').get(id);
+ identity=alice;
+ const customRequest=customOrder(),pendingCustom=await ok(await commerce.POST(request(customRequest)));assert(pendingCustom.pendingSchemeApproval);assert(!getOrder(customRequest.id));assert(!sql.prepare('SELECT id FROM stock_reservations WHERE order_id=?').get(customRequest.id));assert.equal(agencyMessages(customRequest.id).length,0);
+ const customRequestRow=sql.prepare('SELECT * FROM workflow_requests WHERE id=?').get(customRequest.id);assert.equal(customRequestRow.kind,'custom_scheme');assert.equal(JSON.parse(customRequestRow.body).items[0].free,8);
+ const retryCustom=await ok(await commerce.POST(request({...customRequest,lines:[{productId:customProduct.id,qty:1,scheme:'none'}]})));assert(retryCustom.pendingSchemeApproval);assert(!getOrder(customRequest.id));
+ await ok(await commerce.POST(request({action:'approveCustomScheme',requestId:customRequest.id})),403);
+ identity=bob;assert(!(await ok(await planning.GET())).requests.some(r=>r.id===customRequest.id));await ok(await commerce.POST(request(customRequest)),403);
+ identity=owner;await ok(await commerce.POST(request({action:'approveDirect',requestId:customRequest.id})),409);
+ await ok(await commerce.PATCH(request({id:customRequest.id,requestId:crypto.randomUUID(),revision:1,action:'approveOrder'})),403);
+ await post('Products',{...customProductData,PTR:'96'},{id:customProduct.id});
+ await ok(await commerce.POST(request({action:'approveCustomScheme',requestId:customRequest.id})));await ok(await commerce.POST(request({action:'approveCustomScheme',requestId:customRequest.id})),409);
+ let customStored=getOrder(customRequest.id);assert.equal(customStored.accepted,0);assert.equal(customStored.status,'Placed');assert.equal(JSON.parse(customStored.items)[0].rate,8000);assert.equal(sql.prepare('SELECT quantity FROM stock_reservations WHERE order_id=? AND product_id=?').get(customRequest.id,customProduct.id).quantity,28);assert.equal(qty(s1.id,customProduct.id),100);assert.equal(agencyMessages(customRequest.id).length,0);
+ assert((await ok(await approvals.GET())).requests.some(r=>r.kind==='order_approval'&&r.record_id===customRequest.id));
+ await ok(await commerce.PATCH(request({id:customRequest.id,requestId:crypto.randomUUID(),revision:1,action:'approveOrder'})));customStored=getOrder(customRequest.id);assert.equal(customStored.accepted,1);assert.equal(customStored.revision,2);assert.equal(agencyMessages(customRequest.id).length,1);assert(agencyMessages(customRequest.id)[0].message.includes('Free qty: 8'));assert(!/₹|rate|value/i.test(agencyMessages(customRequest.id)[0].message));
+ // A custom amendment cannot be approved as an order or forwarded before scheme review.
+ identity=alice;const customEditId=crypto.randomUUID(),customEdit={id:customRequest.id,requestId:customEditId,revision:2,lines:[{productId:customProduct.id,qty:20,scheme:'other',customPaid:10,customFree:5},{productId:customSecond.id,qty:2,scheme:'none'}],notes:'Request one extra free unit per group'};
+ assert((await ok(await commerce.PATCH(request(customEdit)))).pendingSchemeApproval);assert.equal(getOrder(customRequest.id).revision,2);assert.equal(JSON.parse(getOrder(customRequest.id).items)[0].free,8);assert((await ok(await commerce.GET())).invoices.find(i=>i.id===customRequest.id).schemeApprovalPending);
+ await ok(await commerce.PATCH(request({...customEdit,requestId:crypto.randomUUID()})),409);
+ identity=owner;await ok(await commerce.PATCH(request({id:customRequest.id,revision:2,requestId:crypto.randomUUID(),action:'approveOrder'})),409);
+ let customReview=await ok(await approvals.GET());await ok(await commerce.PATCH(request({action:'approve',requestId:customEditId,hash:customReview.hash})));customStored=getOrder(customRequest.id);assert.equal(customStored.accepted,0);assert.equal(customStored.revision,3);assert.equal(JSON.parse(customStored.items)[0].free,10);assert.equal(JSON.parse(customStored.items)[0].rate,8000);assert.equal(agencyMessages(customRequest.id).length,1);
+ await ok(await commerce.PATCH(request({id:customRequest.id,revision:3,requestId:crypto.randomUUID(),action:'approveOrder'})));assert.equal(getOrder(customRequest.id).accepted,1);assert.equal(agencyMessages(customRequest.id).length,2);
+ // A not-yet-approved standard order must not bypass a subsequently requested custom offer.
+ identity=alice;const waitingCustom=invoice('secondary',s1.id,[{productId:customProduct.id,qty:10,scheme:'none'}],{customerId:messageCustomer.id});await ok(await commerce.POST(request(waitingCustom)));const waitingCustomEdit=crypto.randomUUID();await ok(await commerce.PATCH(request({id:waitingCustom.id,revision:1,requestId:waitingCustomEdit,lines:[{productId:customProduct.id,qty:10,scheme:'other',customPaid:10,customFree:3}]})));
+ identity=owner;const waitingBlock=await ok(await commerce.PATCH(request({id:waitingCustom.id,revision:1,requestId:crypto.randomUUID(),action:'approveOrder'})),409);assert(waitingBlock.error.includes('custom scheme'));assert.equal(getOrder(waitingCustom.id).accepted,0);assert.equal(agencyMessages(waitingCustom.id).length,0);assert(!(await ok(await approvals.GET())).requests.some(r=>r.kind==='order_approval'&&r.record_id===waitingCustom.id));await ok(await commerce.PATCH(request({id:waitingCustom.id,revision:1,requestId:crypto.randomUUID(),action:'status',status:'Cancelled',reason:'Withdraw pending test offer'})));
+ // Direct company proposals with a special rate still require the separate order approval.
+ identity=alice;const customCompany={...customOrder(),stockistId:'company-stock',lines:[{productId:customProduct.id,qty:10,scheme:'other',customPaid:10,customFree:3,proposedRate:70}]};await ok(await commerce.POST(request(customCompany)));
+ identity=owner;await ok(await commerce.POST(request({action:'approveCustomScheme',requestId:customCompany.id})));assert.equal(getOrder(customCompany.id).accepted,0);assert.equal(JSON.parse(getOrder(customCompany.id).items)[0].rate,7000);
+ await ok(await commerce.PATCH(request({id:customCompany.id,revision:1,requestId:crypto.randomUUID(),action:'status',status:'Delivered'})),403);
+ await ok(await commerce.PATCH(request({id:customCompany.id,revision:1,requestId:crypto.randomUUID(),action:'approveOrder'})));
+ await ok(await commerce.PATCH(request({id:customCompany.id,revision:2,requestId:crypto.randomUUID(),action:'status',status:'Delivered'})));assert.equal(qty('company-stock',customProduct.id),87);assert.equal(qty(s1.id,customProduct.id),100);assert.equal(agencyMessages(customCompany.id).length,0);
+ identity=alice;await ok(await commerce.PATCH(request({id:customCompany.id,revision:3,requestId:crypto.randomUUID(),lines:[{productId:customProduct.id,qty:10,scheme:'other',customPaid:10,customFree:5}],notes:'Change completed offer'})),409);
+ // Rejection keeps the existing offer, and cancellation resolves any outstanding request.
+ identity=alice;const rejectedEditId=crypto.randomUUID();await ok(await commerce.PATCH(request({...customEdit,revision:4,requestId:rejectedEditId})));
+ identity=owner;await ok(await commerce.PATCH(request({action:'reject',requestId:rejectedEditId})),400);await ok(await commerce.PATCH(request({action:'reject',requestId:rejectedEditId,reason:'Retain the current approved scheme'})));assert.equal(getOrder(customRequest.id).revision,4);assert.equal(getOrder(customRequest.id).accepted,1);await ok(await commerce.PATCH(request({action:'reject',requestId:rejectedEditId,reason:'Duplicate review'})),409);
+ identity=alice;const cancelledEditId=crypto.randomUUID();await ok(await commerce.PATCH(request({...customEdit,revision:4,requestId:cancelledEditId})));identity=owner;await ok(await commerce.PATCH(request({id:customRequest.id,revision:4,requestId:crypto.randomUUID(),action:'status',status:'Cancelled',reason:'Customer withdrew the order'})));assert.equal(sql.prepare('SELECT status FROM workflow_requests WHERE id=?').get(cancelledEditId).status,'Rejected');assert(!sql.prepare('SELECT id FROM stock_reservations WHERE order_id=?').get(customRequest.id));
+ identity=alice;
+ // Validation, draft persistence, rejection, month locks and replay resistance.
+ const badCustom=customOrder();for(const bad of [{customPaid:0},{customFree:0},{customFree:1.5},{customFree:undefined},{proposedFree:1}])await ok(await commerce.POST(request({...badCustom,id:crypto.randomUUID(),lines:[{...badCustom.lines[0],...bad}]})),400);
+ const rejectedCustom=customOrder();await ok(await commerce.POST(request(rejectedCustom)));identity=owner;await ok(await commerce.POST(request({action:'rejectCustomScheme',requestId:rejectedCustom.id})),400);await ok(await commerce.POST(request({action:'rejectCustomScheme',requestId:rejectedCustom.id,reason:'Offer exceeds permitted free units'})));assert.equal(sql.prepare('SELECT status FROM workflow_requests WHERE id=?').get(rejectedCustom.id).status,'Rejected');assert(!getOrder(rejectedCustom.id));assert.equal(agencyMessages(rejectedCustom.id).length,0);await ok(await commerce.POST(request({action:'approveCustomScheme',requestId:rejectedCustom.id})),409);
+ identity=alice;await ok(await commerce.POST(request(rejectedCustom)),409);
+ const lockedCustom=customOrder();await ok(await commerce.POST(request(lockedCustom)));sql.prepare("INSERT INTO period_locks VALUES (?,1,'custom-lock',?,?,?)").run(fieldDate.slice(0,7),new Date().toISOString(),owner.email,'Test custom scheme lock');identity=owner;await ok(await commerce.POST(request({action:'approveCustomScheme',requestId:lockedCustom.id})),409);assert(!getOrder(lockedCustom.id));sql.exec('DELETE FROM period_locks');await ok(await commerce.POST(request({action:'rejectCustomScheme',requestId:lockedCustom.id,reason:'Request withdrawn'})));
+ identity=alice;const draftCustom=customOrder(),draftPayload={customerId:messageCustomer.id,customerName:'Doctor',stockistId:s1.id,date:fieldDate,notes:'Custom offer',visitId:'',lines:draftCustom.lines,promises:[]};
+ await ok(await draftsAPI.POST(request({id:draftCustom.id,kind:'order',revision:0,payload:draftPayload})));const savedCustomDraft=(await ok(await draftsAPI.GET())).drafts.find(d=>d.id===draftCustom.id);assert.equal(savedCustomDraft.payload.lines[0].customFree,4);await ok(await commerce.POST(request(draftCustom)));assert(!(await ok(await draftsAPI.GET())).drafts.some(d=>d.id===draftCustom.id));
+ identity=owner;await ok(await commerce.POST(request({action:'rejectCustomScheme',requestId:draftCustom.id,reason:'Test request withdrawn'})));
+ // The month-end review includes custom requests even before an invoice exists.
+ const oldCustomId=crypto.randomUUID(),oldCustomBody=JSON.parse(customRequestRow.body);oldCustomBody.input.id=oldCustomId;oldCustomBody.input.date='2020-01-15';
+ sql.prepare("INSERT INTO workflow_requests(id,kind,mr_email,record_id,body,status,created) VALUES (?,'custom_scheme',?,?,?,'Pending',?)").run(oldCustomId,alice.email,oldCustomId,JSON.stringify(oldCustomBody),new Date().toISOString());
+ const customCloseReview=await ok(await periods.POST(request({action:'review',month:'2020-01'})));assert(customCloseReview.checklist.find(c=>c.title==='Pending approvals through this month').items.some(i=>i.id===oldCustomId));await ok(await periods.POST(request({action:'close',month:'2020-01',hash:customCloseReview.hash})),409);sql.prepare('DELETE FROM workflow_requests WHERE id=?').run(oldCustomId);
+
+ console.log('PASS: custom scheme request before order approval for both channels, frozen rates, multi-product quantities, MR permissions, draft persistence, pending-edit forwarding block, separate reapproval, rejection, replay and month locks. No external sends.');
+
+
  if(process.env.MONGO_TEST_MODE!=='model'){
   const native=load(path.join(root,'lib/mongo/database.ts')).mongoDatabase;
   const {physicalStockGuard}=load(path.join(root,'lib/order-stock.ts'));

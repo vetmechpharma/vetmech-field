@@ -72,6 +72,31 @@ form. No scheme-specific net rate overwrites the standard catalogue PTR or PTS.
 Blue identifies PTR, purple identifies PTS, teal identifies GST-inclusive rates,
 green identifies profit and red identifies loss. Text labels accompany colours.
 
+## MR custom scheme requests
+
+Choose **Other / Custom scheme** while taking an order. Enter the paid and free
+quantities per group, such as 10 + 4, and add the reason in the order notes.
+The entered order quantity still determines the number of complete groups earned.
+The preview displays the proposed net rate excluding and including GST.
+
+This applies to stockist and direct company orders. Admin first reviews the
+scheme in **Approvals → Scheme & pricing requests**. Until approval, the request
+does not create an order invoice or reserve stock. Rejection records a reason
+visible to the MR; the MR can place a new request with revised terms.
+
+**Approve custom scheme** saves the reviewed prices and quantities and creates
+an order awaiting separate approval. It does not forward anything to a stockist.
+Admin must then approve the order to forward it, or approve the company order
+before completing company supply. A special company rate can be requested with
+the custom scheme in the same review. Catalogue schemes and prices are unchanged.
+
+Custom changes to an existing open order also require review. Pending custom
+changes block order approval and completion. Approval
+of the change returns the order to the separate order-approval step. Existing
+prices and GST remain fixed unless repricing is explicitly approved. Completed
+orders cannot receive a new custom scheme; use a new order for a new offer.
+Month locks, MR access rules and the original order-month restriction still apply.
+
 ## Primary sales: retail schemes and stockist bulk offers
 
 After selecting a product on a primary invoice, **Retail schemes for MR** loads

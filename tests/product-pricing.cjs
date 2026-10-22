@@ -77,3 +77,18 @@ const savedScheme=priceLine(screenshotProduct,'p',10,'3',false);assert.equal(pri
 assert.equal(pricing.orderSchemePreview({...savedScheme,schemeType:undefined}),null);assert.equal(pricing.orderSchemePreview(priceLine(screenshotProduct,'p',10,'none',false)),null);
 const taxedScheme=pricing.orderSchemePreview(priceLine({...screenshotProduct,'GST %':'5'},'p',10,'2',false));close(taxedScheme.rates.exGST,691.2);close(taxedScheme.rates.inclGST,725.76);
 console.log('PASS: scheme reference prices are quantity-independent, while stock and order totals use whole earned free groups; saved scheme terms and GST stay consistent.');
+
+const {requestedOrderLine,hasCustomScheme,customSchemeChanged}=load('lib/custom-schemes.ts');
+const customInput={productId:'p',qty:20,scheme:'other',customPaid:10,customFree:4};
+const custom= requestedOrderLine(p,customInput);
+assert.equal(custom.free,8);assert.equal(custom.subtotal,160000);assert.equal(custom.total,168000);assert.equal(custom.schemeLabel,'Custom 10 + 4');
+close(pricing.orderSchemePreview(custom).rates.exGST,800/14);close(pricing.orderSchemePreview(custom).rates.inclGST,840/14);
+assert.equal(requestedOrderLine(p,{...customInput,qty:9}).free,0);
+const changedCustom=requestedOrderLine({...p,PTR:'999','GST %':'18'},{...customInput,qty:30,customFree:5},custom);
+assert.equal(changedCustom.baseRate,8000);assert.equal(changedCustom.gst,5);assert.equal(changedCustom.free,15);assert(customSchemeChanged([custom],[changedCustom]));
+assert(!customSchemeChanged([custom],[{...custom}]));assert(hasCustomScheme([custom]));assert(!hasCustomScheme());
+for(const invalid of [{customPaid:0},{customFree:0},{customFree:1.5},{customPaid:100001},{proposedFree:1},{customPaid:undefined}])assert.throws(()=>requestedOrderLine(p,{...customInput,...invalid}));
+assert.throws(()=>requestedOrderLine(p,{...customInput,scheme:'none'}));
+assert.throws(()=>requestedOrderLine(p,{...customInput,qty:100000,customPaid:1,customFree:100000}));
+const fromDiscount=requestedOrderLine(p,customInput,priceLine(p,'p',20,'2',false));assert.equal(fromDiscount.rate,8000);assert.equal(fromDiscount.schemeDiscount,0);
+console.log('PASS: custom buy/free groups, GST previews, input bounds, saved base-rate preservation and no discount stacking.');
