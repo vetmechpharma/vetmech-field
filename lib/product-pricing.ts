@@ -101,6 +101,21 @@ export function effectiveRates(rateExGST: number, gst: number, paid: number, fre
   return {exGST: subtotal / 100 / (paid + free), inclGST: total / 100 / (paid + free)};
 }
 
+/** Scheme reference price is independent of the current order quantity. */
+export function orderSchemePreview(line: {
+  scheme: string; schemeType?: string; schemePaid?: number; schemeFree?: number; schemeDiscount?: number;
+  schemeLabel?: string; baseRate?: number; rate: number; gst: number; qty: number; schemeNote?: string;
+}) {
+  if (line.scheme === 'none' || !line.schemeType || line.baseRate === undefined) return null;
+  const paid = line.schemeType === 'Discount' ? 1 : line.schemePaid ?? 0;
+  const free = line.schemeType === 'Discount' ? 0 : line.schemeFree ?? 0;
+  if (!Number.isInteger(paid) || paid < 1 || !Number.isInteger(free) || free < 0) return null;
+  const rates = effectiveRates(line.baseRate / 100, line.gst, paid, free, line.schemeDiscount || 0);
+  if (!rates) return null;
+  const nextQuantity = free > 0 && !line.schemeNote && line.qty % paid !== 0 ? Math.ceil(line.qty / paid) * paid : null;
+  return {rates, paid, free, label: line.schemeLabel || `${paid} + ${free}`, qualifies: line.qty >= paid, nextQuantity: nextQuantity && nextQuantity <= 100000 ? nextQuantity : null};
+}
+
 export function profitOnCost(netPTS: number, cost: string | undefined) {
   if (!cost?.trim() || !Number.isFinite(Number(cost)) || Number(cost) < 0) return null;
   const amount = netPTS - Number(cost);

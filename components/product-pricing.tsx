@@ -1,5 +1,5 @@
 'use client';
-import {formatPrice as money, withGST, effectiveRates, hasPricingMargins, previewProductPricing, productScheme, profitOnCost, schemeLabel, schemeSlots, type ProductData} from '../lib/product-pricing';
+import {formatPrice as money, orderSchemePreview, withGST, effectiveRates, hasPricingMargins, previewProductPricing, productScheme, profitOnCost, schemeLabel, schemeSlots, type ProductData} from '../lib/product-pricing';
 import type {PricedLine} from '../lib/field-rules';
 
 function RatePair({label, exGST, inclGST, tone = 'ptr'}: {label: string; exGST: number | null; inclGST: number | null; tone?: string}) {
@@ -80,10 +80,19 @@ export function ProductPriceCell({data, field, admin}: {data: ProductData; field
   return <>{data[field] || '—'}</>;
 }
 
-export function OrderNetRates({line, proposed = false, saved = false}: {line: PricedLine; proposed?: boolean; saved?: boolean}) {
-  const units = line.qty + line.free;
+export function OrderNetRates({line, proposed = false, saved = false, onUseSchemeQuantity}: {line: PricedLine; proposed?: boolean; saved?: boolean; onUseSchemeQuantity?: (qty: number) => void}) {
+  const units = line.qty + line.free, scheme = orderSchemePreview(line);
+  const actual = {exGST: units > 0 ? line.subtotal / 100 / units : null, inclGST: units > 0 ? line.total / 100 / units : null};
+  const different = scheme && (actual.exGST === null || actual.inclGST === null || money(scheme.rates.exGST) !== money(actual.exGST) || money(scheme.rates.inclGST) !== money(actual.inclGST));
   return <section className="order-net-rates" aria-label="Order net rates" aria-live="polite">
-    <div className="pricing-grid"><RatePair label={proposed ? 'Proposed net / supplied unit' : 'Net / supplied unit'} exGST={units > 0 ? line.subtotal / 100 / units : null} inclGST={units > 0 ? line.total / 100 / units : null}/></div>
+    <div className="pricing-grid">
+      {scheme ? <RatePair label={`${proposed ? 'Proposed scheme' : 'Scheme'} net / unit · ${scheme.label}`} exGST={scheme.rates.exGST} inclGST={scheme.rates.inclGST}/> : <RatePair label={proposed ? 'Proposed order net / supplied unit' : 'Order net / supplied unit'} exGST={actual.exGST} inclGST={actual.inclGST}/>}
+      {different && <RatePair label="Current quantity · net / supplied unit" exGST={actual.exGST} inclGST={actual.inclGST} tone="actual"/>}
+    </div>
+    {scheme && scheme.free > 0 && !line.schemeNote && <div className={`scheme-quantity-note${scheme.qualifies ? '' : ' below-scheme-minimum'}`}>
+      <span>{!scheme.qualifies ? `This scheme needs ${scheme.paid} paid units. Current quantity ${line.qty} earns no free units.` : `Scheme: ${scheme.paid} paid + ${scheme.free} free per complete group.`}{different ? ' Order totals use the actual paid and free quantities below.' : ''}</span>
+      {scheme.nextQuantity && onUseSchemeQuantity && <button type="button" className="secondary" onClick={() => onUseSchemeQuantity(scheme.nextQuantity!)}>Use {scheme.nextQuantity} paid units</button>}
+    </div>}
     <p>{saved ? 'Saved' : 'Order'} base: <b>{money((line.baseRate ?? line.rate) / 100)}</b> / paid unit excl. GST · Before scheme discount</p>
     <p>{line.qty} paid + {line.free} free = {units} units · GST {line.gst}%{line.schemeDiscount ? ` · ${line.schemeDiscount}% discount` : ''}</p>
     <p>Line total: <b>{money(line.subtotal / 100)}</b> excl. GST · <b>{money(line.total / 100)}</b> incl. GST{proposed ? ' · Subject to Admin approval' : ''}</p>

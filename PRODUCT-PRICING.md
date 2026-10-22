@@ -55,6 +55,15 @@ units. Percentage discounts round the paid-unit rate to paise; GST rounds on the
 line total. The effective unit rate is displayed to two decimals and is not used
 to recalculate the invoice total.
 
+The selected **Scheme net / unit** is always shown, even when the entered quantity
+is below the scheme's buy quantity. When the current order earns a different net
+rate, a separate **Current quantity** card shows that actual rate. For PTR ₹864
+and GST 0%, the scheme reference is ₹720.00 for 5 + 1, ₹691.20 for 20 + 5 and ₹682.11
+for 30 + 8. An order of 10 paid units earns two free units under 5 + 1, but none
+under 20 + 5 or 30 + 8. The quantity note explains this; **Use 20 paid units** (or
+the relevant next complete group) changes the quantity only when the MR clicks it.
+No fractional free units or automatic quantity changes are introduced.
+
 Direct-company proposed rates are excluding GST and before any selected
 percentage discount. Departures from approved pricing still require Admin
 approval. Approval previews and order edits use the same calculation as the order

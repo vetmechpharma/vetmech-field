@@ -67,3 +67,13 @@ assert.equal(receiptLine(many,'product',{qty:1,retailSchemeIds:Array.from({lengt
 const {mrReport}=load('lib/benefit-visibility.ts'),oldPrimaryReport={tables:[{title:'Primary sales — linked agencies',columns:['Product','Retail scheme / reference','Discount %','Stockist bulk offer','Stockist discount %'],rows:[['P','10 + 3','12%','10 cases + 2 cases','12%']]}]};
 assert.deepEqual(mrReport(oldPrimaryReport).tables[0].rows,[['P','10 + 3']]);assert.equal(oldPrimaryReport.tables[0].rows[0].length,5);
 console.log('PASS: catalogue primary scheme selection, exact stock separation, saved and legacy references, 20 alternatives and archived MR bulk-offer privacy.');
+
+const screenshotProduct={Name:'ZEBUCAL LIQ',PTR:'864','GST %':'0','Scheme 1 enabled':'Yes','Scheme 1 paid':'5','Scheme 1 free':'1','Scheme 2 enabled':'Yes','Scheme 2 paid':'20','Scheme 2 free':'5','Scheme 3 enabled':'Yes','Scheme 3 paid':'30','Scheme 3 free':'8'};
+for(const [slot,expected,free] of [['1',720,2],['2',691.2,0],['3',25920/38,0]]){
+ const l=priceLine(screenshotProduct,'p',10,slot,false),preview=pricing.orderSchemePreview(l);close(preview.rates.exGST,expected);close(preview.rates.inclGST,expected);assert.equal(l.free,free);assert.equal(l.subtotal,864000);
+}
+const partialScheme=pricing.orderSchemePreview(priceLine(screenshotProduct,'p',35,'3',false));assert.equal(partialScheme.nextQuantity,60);
+const savedScheme=priceLine(screenshotProduct,'p',10,'3',false);assert.equal(pricing.orderSchemePreview(orderLine({...screenshotProduct,'Scheme 3 free':'30'},'p',10,'3',savedScheme)).rates.exGST,25920/38);
+assert.equal(pricing.orderSchemePreview({...savedScheme,schemeType:undefined}),null);assert.equal(pricing.orderSchemePreview(priceLine(screenshotProduct,'p',10,'none',false)),null);
+const taxedScheme=pricing.orderSchemePreview(priceLine({...screenshotProduct,'GST %':'5'},'p',10,'2',false));close(taxedScheme.rates.exGST,691.2);close(taxedScheme.rates.inclGST,725.76);
+console.log('PASS: scheme reference prices are quantity-independent, while stock and order totals use whole earned free groups; saved scheme terms and GST stay consistent.');
