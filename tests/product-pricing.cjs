@@ -7,7 +7,7 @@ function load(file) {
   new Function('require', 'exports', 'module', code)(name => name.startsWith('.') ? load(path.resolve(path.dirname(file), name + '.ts')) : require(name), m.exports, m);
   return m.exports;
 }
-const pricing = load('lib/product-pricing.ts'), {priceLine, orderLine} = load('lib/field-rules.ts'), {proposedLine} = load('lib/supply.ts');
+const pricing = load('lib/product-pricing.ts'), {priceLine, orderLine, receiptLine} = load('lib/field-rules.ts'), {proposedLine} = load('lib/supply.ts');
 const base = {Name: 'Pricing fixture', MRP: '105', 'GST %': '5', 'Retail margin %': '20', 'Stockist margin %': '10', 'Landing cost': '40', PTR: '999', PTS: '999', 'Scheme 1 enabled': 'Yes', 'Scheme 1 paid': '10', 'Scheme 1 free': '3', 'Scheme 2 enabled': 'Yes', 'Scheme 2 type': 'Discount', 'Scheme 2 discount %': '5'};
 const p = pricing.normalizeProductPricing(base);
 assert.equal(p.PTR, '80.00'); assert.equal(p.PTS, '72.00'); assert.equal(base.PTR, '999');
@@ -52,3 +52,18 @@ assert.equal(pricing.applyPercentage(45,30),32);assert.equal(pricing.applyPercen
 assert.equal(pricing.effectiveRates(.45,5,1,0,30).exGST,.32);assert.equal(priceLine({...p,PTR:'.45','Scheme 2 discount %':'30'},'p',1,'2',false).rate,32);
 assert.equal(pricing.applyPercentage(100000000000000,100,true),200000000000000);
 console.log('PASS: exact half-paise discount/GST rounding and high-value integer amounts.');
+
+// Primary selling references must not become stockist bulk/free terms.
+const receipt = receiptLine(p, 'product', {qty:100,freeQty:20,retailSchemeIds:['1','2'],retailSchemes:['forged'],stockistOffer:'10 cases + 2 cases',discountPercent:12});
+assert.deepEqual(receipt.retailSchemes,['10 + 3','5% discount']);assert.equal(receipt.free,20);assert.equal(receipt.qty+receipt.free,120);assert.equal(receipt.subtotal,0);assert.equal(receipt.stockistOffer,'10 cases + 2 cases');
+assert.equal(receiptLine(p,'product',{qty:100,freeQty:20,retailSchemeIds:[]}).retailScheme,'');
+for(const ids of [['1','1'],['21'],['3']])assert.throws(()=>receiptLine(p,'product',{qty:100,retailSchemeIds:ids}));
+const changedReferences={...p,'Scheme 1 enabled':'No','Scheme 2 discount %':'25'};
+const receiptEdit=receiptLine(changedReferences,'product',{qty:150,freeQty:30,retailSchemeIds:['1','2']},receipt);
+assert.deepEqual(receiptEdit.retailSchemes,receipt.retailSchemes);assert.equal(receiptEdit.free,30);
+assert.equal(receiptLine(p,'product',{qty:1,retailSchemes:['old custom offer']}).retailScheme,'old custom offer');
+const many={...p};for(let i=1;i<=20;i++)Object.assign(many,{[`Scheme ${i} enabled`]:'Yes',[`Scheme ${i} type`]:'Discount',[`Scheme ${i} discount %`]:String(i)});
+assert.equal(receiptLine(many,'product',{qty:1,retailSchemeIds:Array.from({length:20},(_,i)=>String(i+1))}).retailSchemes.length,20);
+const {mrReport}=load('lib/benefit-visibility.ts'),oldPrimaryReport={tables:[{title:'Primary sales — linked agencies',columns:['Product','Retail scheme / reference','Discount %','Stockist bulk offer','Stockist discount %'],rows:[['P','10 + 3','12%','10 cases + 2 cases','12%']]}]};
+assert.deepEqual(mrReport(oldPrimaryReport).tables[0].rows,[['P','10 + 3']]);assert.equal(oldPrimaryReport.tables[0].rows[0].length,5);
+console.log('PASS: catalogue primary scheme selection, exact stock separation, saved and legacy references, 20 alternatives and archived MR bulk-offer privacy.');

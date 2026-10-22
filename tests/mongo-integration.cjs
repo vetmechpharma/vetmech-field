@@ -530,7 +530,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  const manualSaved=sql.prepare('SELECT * FROM invoices WHERE id=?').get(manualPrimary.id);assert.equal(manualSaved.subtotal,123456);assert.equal(manualSaved.total,123456);const manualItems=JSON.parse(manualSaved.items);assert.equal(manualItems[0].free,3);assert.equal(manualItems[0].rate,0);assert.equal(manualItems[0].subtotal,0);assert.equal(manualItems[0].retailScheme,'5+1 / 10+3 / 10%');assert.equal(manualItems[1].retailScheme,'15%');
  await ok(await commerce.POST(request({...manualPrimary,id:crypto.randomUUID(),invoiceValue:undefined})),400);
  await ok(await commerce.POST(request({...manualPrimary,id:crypto.randomUUID(),lines:[{...manualPrimary.lines[0],discountPercent:101}]})),400);assert.equal(qty(s1.id,unpriced.id),13);
- identity=alice;const manualMR=(await ok(await commerce.GET())).invoices.find(i=>i.id===manualPrimary.id);assert.equal(manualMR.items[0].packing,'100 ml');assert.equal(manualMR.items[0].retailScheme,'5+1 / 10+3 / 10%');assert.equal(manualMR.items[0].discountPercent,10);assert(!('rate' in manualMR.items[0]));identity=owner;
+ identity=alice;const manualMR=(await ok(await commerce.GET())).invoices.find(i=>i.id===manualPrimary.id);assert.equal(manualMR.items[0].packing,'100 ml');assert.equal(manualMR.items[0].retailScheme,'5+1 / 10+3 / 10%');assert(!('discountPercent' in manualMR.items[0]));assert(!('rate' in manualMR.items[0]));identity=owner;
  console.log('PASS: manual primary invoice total, no PTS requirement or line pricing, explicit paid/free stock only, retail scheme references, discount validation and MR-visible references without internal rates.');
  const receiptEdit={action:'editPrimary',id:manualPrimary.id,revision:1,reason:'Correct supplier quantity',invoiceValue:1500,number:'MANUAL-EDIT',lines:[{...manualPrimary.lines[0],qty:20,freeQty:2}]};
  identity=alice;await ok(await commerce.PATCH(request(receiptEdit,'PATCH')),403);identity=owner;
@@ -717,6 +717,21 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  const preservedPrice=JSON.parse(sql.prepare('SELECT items FROM invoices WHERE id=?').get(discountOrder.id).items)[0];assert.equal(preservedPrice.rate,7600);assert.equal(preservedPrice.schemeDiscount,5);assert.equal(preservedPrice.total,95760);
  identity=owner;assert.equal((await ok(await records.GET())).records.find(p=>p.id===pricingProduct.id).data['Landing cost'],'40');
  console.log('PASS: product calculator API validation, derived-price tamper resistance, MR cost isolation, scheme order totals and unchanged saved prices after catalogue updates.');
+
+ // Product-scheme references and stockist bulk terms are separate on primary receipts.
+ const schemeReceipt={id:crypto.randomUUID(),kind:'primary',stockistId:s1.id,date:fieldDate,invoiceValue:7000,lines:[{productId:pricingProduct.id,qty:100,freeQty:20,retailSchemeIds:['1','2'],retailSchemes:['forged retail text'],stockistOffer:'10 cases plus 2 cases private deal',discountPercent:17,batch:'RETAIL-SCHEME',expiry:'2035-12-31'}]};
+ await ok(await commerce.POST(request(schemeReceipt)));
+ let receiptStored=sql.prepare('SELECT * FROM invoices WHERE id=?').get(schemeReceipt.id),receiptLineSaved=JSON.parse(receiptStored.items)[0];
+ assert.deepEqual(receiptLineSaved.retailSchemeIds,['1','2']);assert.deepEqual(receiptLineSaved.retailSchemes,['10 + 3','20% discount']);assert.equal(receiptLineSaved.free,20);assert.equal(qty(s1.id,pricingProduct.id),120);assert.equal(receiptStored.subtotal,700000);assert.equal(receiptLineSaved.discountPercent,17);
+ await ok(await commerce.POST(request({...schemeReceipt,id:crypto.randomUUID(),lines:[{...schemeReceipt.lines[0],retailSchemeIds:['3']}]})),400);assert.equal(qty(s1.id,pricingProduct.id),120);
+ await post('Products',{...pricingData,MRP:'210','Scheme 1 enabled':'No','Scheme 2 discount %':'25'},{id:pricingProduct.id});
+ await ok(await commerce.PATCH(request({action:'editPrimary',id:schemeReceipt.id,revision:1,reason:'Correct bulk units',invoiceValue:8000,lines:[{...schemeReceipt.lines[0],qty:110,freeQty:25}]},'PATCH')));
+ receiptStored=sql.prepare('SELECT * FROM invoices WHERE id=?').get(schemeReceipt.id);receiptLineSaved=JSON.parse(receiptStored.items)[0];assert.deepEqual(receiptLineSaved.retailSchemes,['10 + 3','20% discount']);assert.equal(qty(s1.id,pricingProduct.id),135);
+ identity=alice;const publicReceipt=(await ok(await commerce.GET())).invoices.find(i=>i.id===schemeReceipt.id);assert.deepEqual(publicReceipt.items[0].retailSchemes,['10 + 3','20% discount']);assert(!('stockistOffer' in publicReceipt.items[0]));assert(!('discountPercent' in publicReceipt.items[0]));
+ const schemeReport=await ok(await reports.GET(reportURL(alice.email,schemeReceipt.date.slice(0,7)))),primaryTable=schemeReport.tables.find(t=>t.title==='Primary sales — linked agencies');assert(!primaryTable.columns.some(c=>/discount|bulk offer/i.test(c)));assert(!JSON.stringify(schemeReport).includes('10 cases plus 2 cases private deal'));assert(primaryTable.rows.every(r=>r.length===primaryTable.columns.length));
+ identity=owner;const adminSchemeReport=await ok(await reports.GET(reportURL(alice.email,schemeReceipt.date.slice(0,7)))),adminPrimary=adminSchemeReport.tables.find(t=>t.title==='Primary sales — linked agencies');assert(adminPrimary.columns.includes('Stockist bulk offer'));assert(JSON.stringify(adminPrimary).includes('10 cases plus 2 cases private deal'));assert(adminPrimary.rows.every(r=>r.length===adminPrimary.columns.length));
+ console.log('PASS: primary catalogue scheme validation and snapshots, independent bulk/free stock, invoice totals and Admin-only stockist offers in live and printable MR data.');
+
 
  if(process.env.MONGO_TEST_MODE!=='model'){
   const native=load(path.join(root,'lib/mongo/database.ts')).mongoDatabase;

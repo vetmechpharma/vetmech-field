@@ -63,6 +63,28 @@ form. No scheme-specific net rate overwrites the standard catalogue PTR or PTS.
 Blue identifies PTR, purple identifies PTS, teal identifies GST-inclusive rates,
 green identifies profit and red identifies loss. Text labels accompany colours.
 
+## Primary sales: retail schemes and stockist bulk offers
+
+After selecting a product on a primary invoice, **Retail schemes for MR** loads
+the schemes from Product Pricing. Select one or several, select all, or choose
+no retail scheme. Both buy/free and percentage alternatives are supported.
+The server saves the selected scheme labels on that invoice; existing labels
+stay unchanged during quantity edits even if the catalogue later changes.
+Older manually entered references remain until Admin explicitly replaces them.
+
+The **Stockist bulk offer** and **Stockist discount %** are separate Admin-only
+references. For example, a stockist can receive 100 paid + 20 free packed units
+while the retail selling scheme remains 10 + 3. Enter case supplies as the actual
+number of individual packed units. Stock added is exactly paid + free quantity;
+selecting retail schemes never creates extra stock. The invoice value remains
+the manually entered total excluding GST.
+
+MRs see retail references, available stock and the stockist invoice total.
+Internal bulk-offer notes and stockist discounts are excluded from MR API data,
+screens and monthly reports, including older archived report columns. All current
+product retail schemes remain selectable when placing an MR order; primary
+invoice references do not replace the selected order scheme or its calculation.
+
 ## CSV and deployment
 
 Product export and the import template include GST, both margins, landing cost
