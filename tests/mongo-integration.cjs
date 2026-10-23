@@ -205,9 +205,9 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  const edit={id:order.id,requestId:crypto.randomUUID(),revision:2,lines:[{productId:product.id,qty:5,scheme:'none'},{productId:otherProduct.id,qty:2,scheme:'none'}],notes:'Reduced order'};
  identity=bob;await ok(await commerce.PATCH(request(edit,'PATCH')),403);identity=alice;assert((await ok(await commerce.PATCH(request(edit,'PATCH')))).pendingApproval);assert.equal(qty(s1.id,product.id),48);identity=owner;let approvalView=await ok(await approvals.GET());await ok(await commerce.PATCH(request({action:'approve',requestId:edit.requestId,hash:approvalView.hash},'PATCH')));identity=alice;assert.equal(qty(s1.id,product.id),55);assert.equal(sql.prepare('SELECT subtotal FROM invoices WHERE id=?').get(order.id).subtotal,74000);
  await ok(await commerce.PATCH(request(edit,'PATCH')));assert.equal(qty(s1.id,product.id),55);await ok(await commerce.PATCH(request({...edit,requestId:crypto.randomUUID()},'PATCH')),409);
- const badEdit={...edit,requestId:crypto.randomUUID(),revision:3,lines:[{productId:product.id,qty:1,scheme:'none'},{productId:otherProduct.id,qty:999,scheme:'none'}]};assert((await ok(await commerce.PATCH(request(badEdit,'PATCH')))).pendingApproval);identity=owner;approvalView=await ok(await approvals.GET());await ok(await commerce.PATCH(request({action:'approve',requestId:badEdit.requestId,hash:approvalView.hash},'PATCH')),409);await ok(await commerce.PATCH(request({action:'reject',requestId:badEdit.requestId,reason:'Insufficient stock'},'PATCH')));identity=alice;assert.equal(qty(s1.id,product.id),55);assert.equal(sql.prepare('SELECT revision FROM invoices WHERE id=?').get(order.id).revision,3);assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM order_edits WHERE invoice_id=?').get(order.id).n,2);
+ const badEdit={...edit,requestId:crypto.randomUUID(),revision:3,lines:[{productId:product.id,qty:1,scheme:'none'},{productId:otherProduct.id,qty:999,scheme:'none'}]};assert((await ok(await commerce.PATCH(request(badEdit,'PATCH')))).pendingApproval);identity=owner;approvalView=await ok(await approvals.GET());await ok(await commerce.PATCH(request({action:'reject',requestId:badEdit.requestId,reason:'Customer did not request this quantity'},'PATCH')));identity=alice;assert.equal(qty(s1.id,product.id),55);assert.equal(sql.prepare('SELECT revision FROM invoices WHERE id=?').get(order.id).revision,3);assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM order_edits WHERE invoice_id=?').get(order.id).n,2);
  const editedReport=await ok(await reports.GET(reportURL()));assert.equal(editedReport.summary.achieved,74000);assert.equal(editedReport.metrics.primary,680000);const editedStock=editedReport.tables.find(t=>t.title==='Agency stock reconciliation at month end').rows.find(r=>r[0]==='Shared stockist'&&r[1]==='Product A');assert.equal(editedStock[3],60);assert.equal(editedStock[4],5);assert.equal(editedStock[6],55);assert(editedReport.tables.find(t=>t.title==='Field activity — complete recorded details').webOnly);
- const queued=sql.prepare('SELECT * FROM whatsapp_outbox WHERE id LIKE ?').all('order:'+order.id+':%');assert.equal(queued.length,5);assert.equal(queued.filter(q=>q.status==='superseded').length,2);assert.equal(queued.find(q=>q.id.endsWith(':3:agency:updated')).phone,'919876543212');assert.equal(queued.find(q=>q.id.endsWith(':3:admin:updated')).phone,'919944472488');assert(queued.find(q=>q.id.endsWith(':3:admin:updated')).message.includes('UPDATED ORDER'));
+ const queued=sql.prepare('SELECT * FROM whatsapp_outbox WHERE id LIKE ?').all('order:'+order.id+':%');assert.equal(queued.length,4);assert.equal(queued.filter(q=>q.status==='superseded').length,1);assert.equal(queued.find(q=>q.id.endsWith(':3:agency:updated')).phone,'919876543212');assert.equal(queued.find(q=>q.id.endsWith(':3:admin:updated')).phone,'919944472488');assert(queued.find(q=>q.id.endsWith(':3:admin:updated')).message.includes('ORDER UPDATED'));
  const insights=load(path.join(root,'lib/route-insights.ts'));const customerFixture=(id,route)=>({id,kind:'Customers',owner:fixtureMember.user_id,assigned_to:alice.email,created:'2026-01-01',data:{Name:id,Route:route}});const activityFixture=(id,customer,date)=>({id,kind:'Visits',assigned_to:alice.email,created:date,data:{Date:date,'Customer ID':customer,Status:'Closed'}});
  const ri=insights.routeInsights(fixtureMember,'2026-09','2026-08',2,[customerFixture('never','R1'),customerFixture('no-order','R1'),customerFixture('dormant','R2'),customerFixture('active','R2'),activityFixture('v1','no-order','2026-09-02'),activityFixture('v2','active','2026-09-03')],[{id:'old',kind:'secondary',mr_email:alice.email,customer_id:'dormant',date:'2026-06-30',subtotal:10000,number:'OLD'},{id:'prev',kind:'secondary',mr_email:alice.email,customer_id:'active',date:'2026-08-10',subtotal:10000,number:'PREV'},{id:'new',kind:'secondary',mr_email:alice.email,customer_id:'active',date:'2026-09-10',subtotal:20000,number:'NEW'}]);
  assert(ri.tables[1].rows.some(r=>r[0]==='never'));assert(ri.tables[2].rows.some(r=>r[0]==='no-order'));assert.equal(ri.tables[3].rows.length,1);assert.equal(ri.tables[3].rows[0][0],'dormant');assert.equal(ri.tables[0].rows.find(r=>r[0]==='R2')[9],'100.0%');
@@ -430,8 +430,8 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  identity=owner;await ok(await commerce.POST(request(invoice('company_receipt','company-stock',[{productId:product.id,qty:100,scheme:'none'},{productId:otherProduct.id,qty:50,scheme:'none'}]))));const agencyBefore=qty(s1.id,product.id),companyBefore=qty('company-stock',product.id);
  identity=alice;const direct=invoice('secondary','company-stock',[{productId:product.id,qty:2,scheme:'none',proposedRate:100,proposedFree:1}],{customerId:own.id});assert((await ok(await commerce.POST(request(direct)))).pendingApproval);assert(!sql.prepare('SELECT id FROM invoices WHERE id=?').get(direct.id));assert(!sql.prepare('SELECT id FROM stock_reservations WHERE order_id=?').get(direct.id));
  const bypass={...direct,lines:[{productId:product.id,qty:1,scheme:'none'}]};assert((await ok(await commerce.POST(request(bypass)))).pendingApproval);assert(!sql.prepare('SELECT id FROM invoices WHERE id=?').get(direct.id));await ok(await commerce.POST(request({action:'approveDirect',requestId:direct.id})),403);
- identity=owner;await ok(await commerce.POST(request({action:'approveDirect',requestId:direct.id})));await ok(await commerce.POST(request({action:'approveDirect',requestId:direct.id})),409);assert.equal(qty('company-stock',product.id),companyBefore);assert.equal(sql.prepare('SELECT quantity FROM stock_reservations WHERE order_id=?').get(direct.id).quantity,3);let postedDirect=sql.prepare('SELECT * FROM invoices WHERE id=?').get(direct.id);assert.equal(postedDirect.subtotal,20000);assert.equal(postedDirect.kind,'secondary');
- await ok(await commerce.PATCH(request({action:'status',status:'Delivered',id:direct.id,revision:postedDirect.revision,requestId:crypto.randomUUID()})));assert.equal(qty('company-stock',product.id),companyBefore-3);assert.equal(qty(s1.id,product.id),agencyBefore);
+ identity=owner;await ok(await commerce.POST(request({action:'approveDirect',requestId:direct.id})));await ok(await commerce.POST(request({action:'approveDirect',requestId:direct.id})),409);assert.equal(qty('company-stock',product.id),companyBefore);assert(!sql.prepare('SELECT quantity FROM stock_reservations WHERE order_id=?').get(direct.id));let postedDirect=sql.prepare('SELECT * FROM invoices WHERE id=?').get(direct.id);assert.equal(postedDirect.subtotal,20000);assert.equal(postedDirect.kind,'secondary');
+ await ok(await commerce.PATCH(request({action:'status',status:'Delivered',id:direct.id,revision:postedDirect.revision,requestId:crypto.randomUUID()})));assert.equal(qty('company-stock',product.id),companyBefore);assert.equal(qty(s1.id,product.id),agencyBefore);
  identity=alice;const directHistory=await ok(await load(path.join(root,'app/api/customer-history/route.ts')).GET(new Request('https://app.test/api/customer-history?customer='+own.id)));assert(directHistory.orders.some(o=>o.id===direct.id&&o.agency.includes('Direct company')));
  const standardDirect=invoice('secondary','company-stock',[{productId:otherProduct.id,qty:1,scheme:'none'}],{customerId:clinic.id});await ok(await commerce.POST(request(standardDirect)));assert.equal(sql.prepare('SELECT status FROM invoices WHERE id=?').get(standardDirect.id).status,'Placed');
  const directRevision=sql.prepare('SELECT revision FROM invoices WHERE id=?').get(direct.id).revision,editDirectId=crypto.randomUUID();assert((await ok(await commerce.PATCH(request({id:direct.id,requestId:editDirectId,revision:directRevision,lines:[{productId:product.id,qty:2,scheme:'none',proposedRate:95,proposedFree:2}],notes:'Requested direct amendment'})))).pendingApproval);assert.equal(sql.prepare('SELECT subtotal FROM invoices WHERE id=?').get(direct.id).subtotal,20000);identity=owner;const directReview=await ok(await approvals.GET());await ok(await commerce.PATCH(request({action:'approve',requestId:editDirectId,hash:directReview.hash})));assert.equal(sql.prepare('SELECT subtotal FROM invoices WHERE id=?').get(direct.id).subtotal,19000);assert.equal(qty(s1.id,product.id),agencyBefore);identity=alice;
@@ -458,9 +458,9 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  const backupAPI=load(path.join(root,'app/api/backups/route.ts'));identity=alice;await ok(await backupAPI.GET(),403);identity=owner;const noBackup=await ok(await backupAPI.GET());assert.equal(noBackup.stale,true);
  sql.prepare('INSERT INTO communication_settings(id,data,updated) VALUES (?,?,?)').run('backup_monitor',JSON.stringify({status:'Success',lastSuccess:new Date().toISOString(),snapshot:'abcdef1234567890'}),new Date().toISOString());
  await ok(await backupAPI.POST(request({snapshot:'abcdef1234567890',date:fieldDate,reason:'Restored into isolated test database; verified balances and login.'})));const backupState=await ok(await backupAPI.GET());assert.equal(backupState.monitor.restoreSnapshot,'abcdef1234567890');assert.equal(backupState.stale,false);
- const badReceipt={...invoice('primary',s1.id,[{productId:product.id,qty:1,scheme:'none'}]),lines:[{productId:product.id,qty:1,scheme:'none'}]};await ok(await commerce.POST(request(badReceipt)),400);
+ const badReceipt={...invoice('primary',s1.id,[{productId:product.id,qty:1,scheme:'none'}]),lines:[{productId:product.id,qty:1,scheme:'none',expiry:'2026-02-30'}]};await ok(await commerce.POST(request(badReceipt)),400);
  const batchStockView=await ok(await commerce.GET());assert(batchStockView.batches.some(b=>b.batch==='TEST-BATCH'&&b.expiry==='2035-12-31'));identity=alice;const mrStockView=await ok(await commerce.GET());assert(mrStockView.batches.every(b=>b.stockistId==='company-stock'||JSON.parse(sql.prepare('SELECT stockist_ids FROM members WHERE email=?').get(alice.email).stockist_ids).includes(b.stockistId)));assert(mrStockView.batches.every(b=>!('cost' in b)&&!('rate' in b)));identity=owner;
- console.log('PASS: backup Admin-only monitoring and restore evidence, required primary batch fields, scoped MR batch expiry with no internal rates.');
+ console.log('PASS: backup Admin-only monitoring and restore evidence, invalid optional expiry rejection, scoped MR batch expiry with no internal rates.');
  // Multi-district headquarters, canonical geography and safe legacy migration.
  identity=owner;
  const geoA=await ok(await records.POST(request({kind:'Districts',data:{Name:'Geography A',State:'State One'}})));
@@ -536,21 +536,12 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  identity=alice;await ok(await commerce.PATCH(request(receiptEdit,'PATCH')),403);identity=owner;
  await ok(await commerce.PATCH(request(receiptEdit,'PATCH')));assert.equal(qty(s1.id,unpriced.id),22);assert.equal(qty(s1.id,product.id),originalQty);assert.equal(sql.prepare('SELECT subtotal FROM invoices WHERE id=?').get(manualPrimary.id).subtotal,150000);
  await ok(await commerce.PATCH(request(receiptEdit,'PATCH')),409);assert.equal(qty(s1.id,unpriced.id),22);
- const reservedId=crypto.randomUUID(),batchKey=JSON.stringify([s1.id,unpriced.id,'MANUAL','2035-12-31']);
- sql.prepare('INSERT INTO invoices(id,kind,stockist_id,customer_id,mr_email,number,date,items,subtotal,total,visit_id,notes,created,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(reservedId,'secondary',s1.id,'fixture-customer',alice.email,'RESERVED-TEST','2031-01-03',JSON.stringify([{productId:unpriced.id,name:'Test',qty:5,free:0,allocations:[{key:batchKey,quantity:5}]}]),0,0,'','',new Date().toISOString(),'Placed');
- sql.prepare('INSERT INTO stock_reservations(id,order_id,stockist_id,product_id,quantity) VALUES (?,?,?,?,?)').run(reservedId+'|'+unpriced.id,reservedId,s1.id,unpriced.id,5);
- const deleteReceipt={action:'deletePrimary',id:manualPrimary.id,revision:2,reason:'Supplier correction'};
- await ok(await commerce.PATCH(request(deleteReceipt,'PATCH')),409);
- await ok(await commerce.PATCH(request({...receiptEdit,revision:2,lines:[{...receiptEdit.lines[0],qty:1,freeQty:0}]},'PATCH')),409);
- await ok(await commerce.PATCH(request({...receiptEdit,revision:2,lines:[{...receiptEdit.lines[0],batch:'CHANGED'}]},'PATCH')),409);assert.equal(qty(s1.id,unpriced.id),22);
- sql.prepare('DELETE FROM stock_reservations WHERE order_id=?').run(reservedId);sql.prepare("UPDATE invoices SET status='Delivered' WHERE id=?").run(reservedId);sql.prepare('UPDATE stock_balances SET quantity=quantity-5 WHERE stockist_id=? AND product_id=?').run(s1.id,unpriced.id);
- await ok(await commerce.PATCH(request(deleteReceipt,'PATCH')),409);assert.equal(qty(s1.id,unpriced.id),17);
- sql.prepare('DELETE FROM invoices WHERE id=?').run(reservedId);sql.prepare('UPDATE stock_balances SET quantity=quantity+5 WHERE stockist_id=? AND product_id=?').run(s1.id,unpriced.id);
  sql.prepare("INSERT INTO period_locks(month,closed,closure_id,updated,admin_email,reason) VALUES (?,1,'receipt-lock',?,?,?)").run('2031-01',new Date().toISOString(),owner.email,'Receipt lock');
+ const deleteReceipt={action:'deletePrimary',id:manualPrimary.id,revision:2,reason:'Supplier correction'};
  await ok(await commerce.PATCH(request(deleteReceipt,'PATCH')),409);await ok(await commerce.PATCH(request({...receiptEdit,revision:2},'PATCH')),409);sql.prepare('DELETE FROM period_locks WHERE month=?').run('2031-01');
  await ok(await commerce.PATCH(request(deleteReceipt,'PATCH')));assert.equal(qty(s1.id,unpriced.id),0);assert(!sql.prepare('SELECT * FROM invoices WHERE id=?').get(manualPrimary.id));assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM stock_movements WHERE invoice_id=?').get(manualPrimary.id).n,0);assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM admin_audit WHERE entity_id=?').get(manualPrimary.id).n,2);
  await ok(await commerce.PATCH(request(deleteReceipt,'PATCH')),404);assert.equal(qty(s1.id,unpriced.id),0);
- console.log('PASS: primary edits/deletion adjust stock, preserve audit, reject stale edits, MR access, locked months, reserved and delivered batch removal; repeated deletion cannot deduct twice.');
+ console.log('PASS: primary edits/deletion adjust stock, preserve audit, reject stale edits, MR access, locked months and approximate quantities; repeated deletion cannot deduct twice.');
  const extraSchemeProduct={Name:'Many schemes',Pack:'100 ml',MRP:'100',PTR:'50',PTS:'40','Scheme 4 enabled':'Yes','Scheme 4 paid':'5','Scheme 4 free':'2','Scheme 20 enabled':'Yes','Scheme 20 paid':'10','Scheme 20 free':'3'};
  await ok(await records.POST(request({kind:'Products',data:extraSchemeProduct})));
  const priceExtra=load(path.join(root,'lib/field-rules.ts')).priceLine;assert.equal(priceExtra(extraSchemeProduct,'extra',10,'4',false).free,4);assert.equal(priceExtra(extraSchemeProduct,'extra',20,'20',false).free,6);assert.equal(priceExtra(extraSchemeProduct,'extra',10,'none',false).free,0);
@@ -597,7 +588,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
   identity=alice;
   const freshOrder=invoice('secondary',s1.id,[{productId:messageProduct.id,qty:2},{productId:messageProduct2.id,qty:3}],{customerId:messageCustomer.id,notes:'Private pricing adjustment ₹9999'});
   assert((await ok(await commerce.POST(request(freshOrder)))).pendingApproval);
-  assert.equal(sent.length,2);assert(sent.some(m=>m.phone==='919876543219'));assert(!sent.some(m=>m.key.includes(':agency:')));
+  assert.equal(sent.length,1);assert(!sent.some(m=>m.phone==='919876543219'));assert(!sent.some(m=>m.key.includes(':agency:')));
   for(const m of sent){assert(m.text.startsWith('Dear Dr. Message Customer,'));assert(m.text.includes('Message Product · Packing: 100 ml · Qty: 2'));assert(m.text.includes('Message Tablet · Packing: 10 tablets · Qty: 3'));assert(m.text.includes(templates.messageDate(fieldDate)));assert(!/₹|9999|subtotal|order value|rate:/i.test(m.text));}
   assert.equal((await ok(await commerce.GET())).invoices.find(i=>i.id===freshOrder.id).stage,'Pending Admin approval');
   assert((await ok(await approvals.GET())).requests.some(r=>r.kind==='order_approval'&&r.record_id===freshOrder.id));
@@ -607,7 +598,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
   await ok(await commerce.PATCH(request(approvalAction)));const afterFirstSend=sent.length;
   await ok(await commerce.PATCH(request(approvalAction)));assert.equal(sent.length,afterFirstSend);
   await ok(await commerce.PATCH(request({...approvalAction,requestId:crypto.randomUUID()})),409);
-  const forwarded=sql.prepare('SELECT * FROM invoices WHERE id=?').get(freshOrder.id);assert.equal(forwarded.accepted,1);assert.equal(forwarded.forwarded_revision,2);assert.equal(forwarded.status,'Placed');assert.equal(qty(s1.id,messageProduct.id),100);
+  const forwarded=sql.prepare('SELECT * FROM invoices WHERE id=?').get(freshOrder.id);assert.equal(forwarded.accepted,1);assert.equal(forwarded.forwarded_revision,2);assert.equal(forwarded.status,'Placed');assert.equal(qty(s1.id,messageProduct.id),98);
   assert.equal((await ok(await commerce.GET())).invoices.find(i=>i.id===freshOrder.id).stage,'Forwarded to stockist');
   const agencyMsg=sent.find(m=>m.key.includes(freshOrder.id)&&m.key.includes(':agency:'));assert.equal(agencyMsg.phone,'919876543218');assert(agencyMsg.text.includes('Customer registered address'));assert(agencyMsg.text.includes('919876543219'));
   assert(sql.prepare("SELECT id FROM notifications WHERE recipient=? AND title='Order forwarded to stockist' AND record_id=?").get(alice.email,freshOrder.id));
@@ -623,7 +614,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
   identity=owner;await ok(await commerce.PATCH(request({id:companyOrder.id,requestId:crypto.randomUUID(),revision:1,action:'status',status:'Delivered'})),403);
   await ok(await commerce.PATCH(request({id:companyOrder.id,requestId:crypto.randomUUID(),revision:1,action:'approveOrder'})));
   identity=alice;await ok(await commerce.PATCH(request({id:companyOrder.id,requestId:crypto.randomUUID(),revision:2,action:'status',status:'Delivered'})),403);
-  identity=owner;await ok(await commerce.PATCH(request({id:companyOrder.id,requestId:crypto.randomUUID(),revision:2,action:'status',status:'Delivered'})));assert.equal(qty('company-stock',messageProduct.id),98);assert.equal(qty(s1.id,messageProduct.id),100);
+  identity=owner;await ok(await commerce.PATCH(request({id:companyOrder.id,requestId:crypto.randomUUID(),revision:2,action:'status',status:'Delivered'})));assert.equal(qty('company-stock',messageProduct.id),100);assert.equal(qty(s1.id,messageProduct.id),99);
   assert.equal((await ok(await commerce.GET())).invoices.find(i=>i.id===companyOrder.id).stage,'Completed');assert(!sent.some(m=>m.key.includes(companyOrder.id)&&m.key.includes(':agency:')));assert(sent.some(m=>m.key.includes(companyOrder.id)&&m.key.endsWith(':completed')));
   await ok(await commerce.PATCH(request({id:companyOrder.id,requestId:crypto.randomUUID(),revision:3,action:'status',status:'Delivered'})),409);
   // Old unsent templates cannot bypass approval, even when retrying from Admin.
@@ -651,53 +642,62 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  }finally{global.fetch=beforeMessageFetch;identity=owner;await ok(await communications.POST(request({action:'save',config:{...newConfig,whatsappEnabled:false}})));}
  console.log('PASS: new gateway payload/auth/idempotency/status checks; quantity-only customer/Admin templates; mandatory approval; scoped review; stockist forwarding and MR notification; no stockist completion; Admin company completion; saved rates; stale/duplicate actions; all multipart parts; month locks; visit-close once; 30-day log receipt retention. No external sends.');
 
- // Product-level ordering is independent of batch availability. Only confirmed supply consumes stock.
+ // Approximate stock and approved-order achievement are independent of batch/expiry or completion.
  identity=owner;
- const bulkProduct=await post('Products',{Name:'ZEBUCAL LIQ test',Pack:'1 litre',MRP:'200',PTR:'100',PTS:'75','Sample cost':'4','GST %':'5'});
+ const bulkProduct=await post('Products',{Name:'ZEBUCAL LIQ test',Pack:'1 litre',MRP:'200',PTR:'100',PTS:'75','Sample cost':'4','GST %':'5','Scheme 1 enabled':'Yes','Scheme 1 paid':'30','Scheme 1 free':'8'});
  const yesterday=new Date(Date.parse(fieldDate+'T00:00:00Z')-86400000).toISOString().slice(0,10);
  const expiredReceipt=(source)=>({...invoice(source==='company-stock'?'company_receipt':'primary',source,[{productId:bulkProduct.id,qty:5}]),date:yesterday,lines:[{productId:bulkProduct.id,qty:5,scheme:'none',batch:'EXPIRED',expiry:yesterday}]});
- await ok(await commerce.POST(request(expiredReceipt(s1.id))));
- await ok(await commerce.POST(request(expiredReceipt('company-stock'))));
- identity=alice;
- const productReference=(await ok(await records.GET())).records.find(r=>r.id===bulkProduct.id).data;
+ await ok(await commerce.POST(request(expiredReceipt(s1.id))));await ok(await commerce.POST(request(expiredReceipt('company-stock'))));
+ const baseAchievement=(await ok(await reports.GET(reportURL()))).summary.achieved;
+ identity=alice;const productReference=(await ok(await records.GET())).records.find(r=>r.id===bulkProduct.id).data;
  assert.equal(productReference.PTS,'75');assert.equal(productReference.PTR,'100');assert(!('Sample cost' in productReference));
- const bulkAgency=invoice('secondary',s1.id,[{productId:bulkProduct.id,qty:20}],{customerId:messageCustomer.id});
- await ok(await commerce.POST(request(bulkAgency)));
+ const bulkAgency=invoice('secondary',s1.id,[{productId:bulkProduct.id,qty:30,scheme:'1'}],{customerId:messageCustomer.id});await ok(await commerce.POST(request(bulkAgency)));
  let bulkView=(await ok(await commerce.GET())).stock.find(b=>b.stockist_id===s1.id&&b.product_id===bulkProduct.id);
- assert.equal(bulkView.quantity,5);assert.equal(bulkView.expired,5);assert.equal(bulkView.reserved,20);assert.equal(bulkView.available,0);assert.equal(bulkView.shortage,20);
- assert(!JSON.parse(sql.prepare('SELECT items FROM invoices WHERE id=?').get(bulkAgency.id).items)[0].allocations);
- identity=owner;await ok(await commerce.PATCH(request({id:bulkAgency.id,revision:1,requestId:crypto.randomUUID(),action:'approveOrder'})));
- assert.equal(sql.prepare('SELECT accepted FROM invoices WHERE id=?').get(bulkAgency.id).accepted,1);assert.equal(qty(s1.id,bulkProduct.id),5);
- identity=alice;
- const bulkCompany=invoice('secondary','company-stock',[{productId:bulkProduct.id,qty:100,proposedRate:80}],{customerId:messageCustomer.id});
- assert((await ok(await commerce.POST(request(bulkCompany)))).pendingApproval);
- identity=owner;await ok(await commerce.POST(request({action:'approveDirect',requestId:bulkCompany.id})));
- assert.equal(JSON.parse(sql.prepare('SELECT items FROM invoices WHERE id=?').get(bulkCompany.id).items)[0].rate,8000);
- const completeBulk={id:bulkCompany.id,revision:1,requestId:crypto.randomUUID(),action:'status',status:'Delivered'};
- const noSupply=await ok(await commerce.PATCH(request(completeBulk)),409);assert(noSupply.error.includes('Cannot complete supply'));assert.equal(qty('company-stock',bulkProduct.id),5);assert.equal(sql.prepare('SELECT status FROM invoices WHERE id=?').get(bulkCompany.id).status,'Placed');
- // A partial replenishment is accepted even while demand exceeds available stock.
- await ok(await commerce.POST(request(invoice('company_receipt','company-stock',[{productId:bulkProduct.id,qty:30}]))));
- bulkView=(await ok(await commerce.GET())).stock.find(b=>b.stockist_id==='company-stock'&&b.product_id===bulkProduct.id);
- assert.equal(bulkView.quantity,35);assert.equal(bulkView.shortage,70);assert.equal(bulkView.available,0);
- const shortStatement=await ok(await statement.GET(new Request('https://example.test/api/stock-statement?from=2020-01-01&to=2099-12-31')));
- const shortRow=shortStatement.summary.find(b=>b.stockistId==='company-stock'&&b.productId===bulkProduct.id);assert.equal(shortRow.available,0);assert.equal(shortRow.shortage,70);
- await ok(await commerce.POST(request(invoice('company_receipt','company-stock',[{productId:bulkProduct.id,qty:70}]))));
- // Another order is allowed to await replenishment; Admin chooses which supply to complete first.
- identity=alice;const waiting=invoice('secondary','company-stock',[{productId:bulkProduct.id,qty:10}],{customerId:messageCustomer.id});await ok(await commerce.POST(request(waiting)));
- identity=owner;await ok(await commerce.PATCH(request(completeBulk)));assert.equal(qty('company-stock',bulkProduct.id),5);assert.equal(qty(s1.id,bulkProduct.id),5);
- const completedItems=JSON.parse(sql.prepare('SELECT items FROM invoices WHERE id=?').get(bulkCompany.id).items);assert(completedItems[0].allocations.length);assert(completedItems[0].allocations.every(a=>!a.key.includes('EXPIRED')));
- await ok(await commerce.PATCH(request(completeBulk)));assert.equal(qty('company-stock',bulkProduct.id),5);
- await ok(await commerce.PATCH(request({id:waiting.id,revision:1,requestId:crypto.randomUUID(),action:'approveOrder'})));
- const completeWaiting={id:waiting.id,revision:2,requestId:crypto.randomUUID(),action:'status',status:'Delivered'};await ok(await commerce.PATCH(request(completeWaiting)),409);
- // An entirely absent inventory row still appears as product demand, rather than disappearing from stock views.
+ assert.equal(bulkView.quantity,5);assert.equal(bulkView.expired,0);assert.equal(bulkView.reserved,38);assert.equal(bulkView.shortage,33);
+ assert.equal((await ok(await reports.GET(reportURL()))).summary.achieved,baseAchievement);
+ identity=owner;const approveBulk={id:bulkAgency.id,revision:1,requestId:crypto.randomUUID(),action:'approveOrder'};
+ await ok(await commerce.PATCH(request(approveBulk)));await ok(await commerce.PATCH(request(approveBulk)));
+ assert.equal(qty(s1.id,bulkProduct.id),-33);assert(!sql.prepare('SELECT id FROM stock_reservations WHERE order_id=?').get(bulkAgency.id));
+ let approvedSummary=(await ok(await reports.GET(reportURL()))).summary;assert.equal(approvedSummary.achieved,baseAchievement+300000);assert.equal(approvedSummary.pending,Math.max(0,approvedSummary.target-approvedSummary.achieved));assert.equal(approvedSummary.percentage,approvedSummary.target?approvedSummary.achieved/approvedSummary.target*100:0);
+ await ok(await commerce.PATCH(request({id:bulkAgency.id,revision:2,requestId:crypto.randomUUID(),action:'status',status:'Delivered'})),403);
+ const received=sql.prepare("SELECT message FROM whatsapp_outbox WHERE visit_id=? AND id LIKE ?").get('order:'+bulkAgency.id+':customer:'+messageCustomer.id,'%:approved');assert(received.message.includes('Your order has been received.'));assert.equal((received.message.match(/Dear Dr\./g)||[]).length,1);assert(received.message.endsWith('Regards\n*VETMECH PHARMA*'));assert(!/Customer:|Supply from:|Revision:|Status:|₹|rate:/i.test(received.message));assert(received.message.includes('Qty: 30 + Free qty: 8'));
+ identity=alice;const approxEdit={id:bulkAgency.id,revision:2,requestId:crypto.randomUUID(),lines:[{productId:bulkProduct.id,qty:60,scheme:'1'}],notes:'Double the requested quantity'};
+ assert((await ok(await commerce.PATCH(request(approxEdit)))).pendingApproval);assert.equal(qty(s1.id,bulkProduct.id),-33);
+ const proposal=JSON.parse(sql.prepare('SELECT body FROM workflow_requests WHERE id=?').get(approxEdit.requestId).body);assert.equal(JSON.parse(proposal.beforeOrder.items)[0].qty,30);assert.equal(proposal.proposedItems[0].qty,60);assert.equal(proposal.proposedItems[0].free,16);
+ identity=owner;let approxReview=await ok(await approvals.GET());await ok(await commerce.PATCH(request({action:'approve',requestId:approxEdit.requestId,hash:approxReview.hash})));
+ assert.equal(qty(s1.id,bulkProduct.id),-71);assert.equal((await ok(await reports.GET(reportURL()))).summary.achieved,baseAchievement+600000);
+ const editedMessage=sql.prepare('SELECT message FROM whatsapp_outbox WHERE id=?').get('order:'+bulkAgency.id+':3:customer:updated').message;assert(editedMessage.includes('Your order has been updated.'));assert(editedMessage.includes('Qty: 60 + Free qty: 16'));assert(!editedMessage.includes('Qty: 30'));
+ approxReview=await ok(await approvals.GET());const approvedEdit=JSON.parse(approxReview.requests.find(r=>r.id===approxEdit.requestId).body);assert.equal(JSON.parse(approvedEdit.beforeOrder.items)[0].qty,30);assert.equal(JSON.parse(approvedEdit.afterOrder.items)[0].qty,60);
+ identity=alice;const rejectedAmendment={...approxEdit,revision:3,requestId:crypto.randomUUID(),lines:[{productId:bulkProduct.id,qty:1,scheme:'none'}]};await ok(await commerce.PATCH(request(rejectedAmendment)));identity=owner;await ok(await commerce.PATCH(request({action:'reject',requestId:rejectedAmendment.requestId,reason:'Keep the approved quantity'})));assert.equal(qty(s1.id,bulkProduct.id),-71);
+ identity=alice;const deleteApproved={id:bulkAgency.id,revision:3,requestId:crypto.randomUUID(),action:'delete',reason:'Customer withdrew order'};
+ assert((await ok(await commerce.PATCH(request(deleteApproved)))).pendingApproval);assert.equal(qty(s1.id,bulkProduct.id),-71);
+ identity=bob;await ok(await commerce.PATCH(request(deleteApproved)),403);identity=owner;approxReview=await ok(await approvals.GET());await ok(await commerce.PATCH(request({action:'approve',requestId:deleteApproved.requestId,hash:approxReview.hash})));
+ assert.equal(qty(s1.id,bulkProduct.id),5);assert.equal((await ok(await reports.GET(reportURL()))).summary.achieved,baseAchievement);assert.equal(sql.prepare('SELECT status FROM invoices WHERE id=?').get(bulkAgency.id).status,'Cancelled');assert.equal(sql.prepare('SELECT status FROM workflow_requests WHERE id=?').get(deleteApproved.requestId).status,'Approved');
+ assert(sql.prepare('SELECT message FROM whatsapp_outbox WHERE id=?').get('order:'+bulkAgency.id+':4:customer:cancelled').message.includes('Your order has been cancelled.'));
+ await ok(await commerce.PATCH(request({action:'approve',requestId:deleteApproved.requestId,hash:approxReview.hash})),409);assert.equal(qty(s1.id,bulkProduct.id),5);
+ // Direct company completion neither requires nor changes any company/agency balance.
+ identity=alice;const bulkCompany=invoice('secondary','company-stock',[{productId:bulkProduct.id,qty:100,proposedRate:80}],{customerId:messageCustomer.id});await ok(await commerce.POST(request(bulkCompany)));
+ identity=owner;await ok(await commerce.POST(request({action:'approveDirect',requestId:bulkCompany.id})));assert.equal((await ok(await reports.GET(reportURL()))).summary.achieved,baseAchievement+800000);
+ const completeBulk={id:bulkCompany.id,revision:1,requestId:crypto.randomUUID(),action:'status',status:'Delivered'};await ok(await commerce.PATCH(request(completeBulk)));await ok(await commerce.PATCH(request(completeBulk)));
+ assert.equal(qty('company-stock',bulkProduct.id),5);assert.equal(qty(s1.id,bulkProduct.id),5);assert.equal((await ok(await reports.GET(reportURL()))).summary.achieved,baseAchievement+800000);
+ assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM stock_movements WHERE invoice_id=?').get(bulkCompany.id).n,0);assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM stock_reservations WHERE order_id=?').get(bulkCompany.id).n,0);
+ assert(!JSON.parse(sql.prepare('SELECT items FROM invoices WHERE id=?').get(bulkCompany.id).items)[0].allocations);
  const zeroProduct=await post('Products',{Name:'Unstocked bulk product',Pack:'Box',PTR:'50',PTS:'40'});
+ identity=alice;const zeroCompany=invoice('secondary','company-stock',[{productId:zeroProduct.id,qty:12}],{customerId:messageCustomer.id});await ok(await commerce.POST(request(zeroCompany)));
+ identity=owner;await ok(await commerce.PATCH(request({id:zeroCompany.id,revision:1,requestId:crypto.randomUUID(),action:'approveOrder'})));await ok(await commerce.PATCH(request({id:zeroCompany.id,revision:2,requestId:crypto.randomUUID(),action:'status',status:'Delivered'})));assert.equal(qty('company-stock',zeroProduct.id),0);
  identity=alice;const zeroOrder=invoice('secondary',s1.id,[{productId:zeroProduct.id,qty:12}],{customerId:messageCustomer.id});await ok(await commerce.POST(request(zeroOrder)));
- let zeroRow=(await ok(await commerce.GET())).stock.find(b=>b.stockist_id===s1.id&&b.product_id===zeroProduct.id);assert.equal(zeroRow.quantity,0);assert.equal(zeroRow.shortage,12);
- identity=owner;await ok(await commerce.PATCH(request({id:zeroOrder.id,revision:1,requestId:crypto.randomUUID(),action:'approveOrder'})));
- const zeroHub=(await ok(await hub.GET(hubURL()))).stock.find(b=>b.stockist_id===s1.id&&b.product_id===zeroProduct.id);assert.equal(zeroHub.shortage,12);
+ identity=owner;await ok(await commerce.PATCH(request({id:zeroOrder.id,revision:1,requestId:crypto.randomUUID(),action:'approveOrder'})));assert.equal(qty(s1.id,zeroProduct.id),-12);
  const zeroStatement=(await ok(await statement.GET(new Request('https://example.test/api/stock-statement?from=2020-01-01&to=2099-12-31')))).summary.find(b=>b.stockistId===s1.id&&b.productId===zeroProduct.id);assert.equal(zeroStatement.shortage,12);
- await ok(await commerce.PATCH(request({id:zeroOrder.id,revision:2,requestId:crypto.randomUUID(),action:'status',status:'Cancelled',reason:'Customer withdrew request'})));assert(!sql.prepare('SELECT id FROM stock_reservations WHERE order_id=?').get(zeroOrder.id));
- console.log('PASS: expired/zero/insufficient stock does not block product orders or Admin approvals; PTS/PTR visible with costs private; company special rate review; partial replenishment; truthful shortages; company completion alone enforces unexpired stock, idempotency and source isolation.');
+ // Primary stock can be added/edited/deleted without batch metadata despite negative approximate stock.
+ const optionalReceipt={id:crypto.randomUUID(),kind:'primary',stockistId:s1.id,date:fieldDate,invoiceValue:400,lines:[{productId:zeroProduct.id,qty:3,freeQty:1}]};await ok(await commerce.POST(request(optionalReceipt)));assert.equal(qty(s1.id,zeroProduct.id),-8);
+ await ok(await commerce.PATCH(request({id:optionalReceipt.id,revision:1,action:'editPrimary',reason:'Adjust received quantity',invoiceValue:200,lines:[{productId:zeroProduct.id,qty:2}]})));assert.equal(qty(s1.id,zeroProduct.id),-10);
+ await ok(await commerce.PATCH(request({id:optionalReceipt.id,revision:2,action:'deletePrimary',reason:'Duplicate receipt'})));assert.equal(qty(s1.id,zeroProduct.id),-12);
+ await ok(await commerce.PATCH(request({id:zeroOrder.id,revision:2,requestId:crypto.randomUUID(),action:'delete',reason:'Customer withdrew request'})));assert.equal(qty(s1.id,zeroProduct.id),0);
+ identity=alice;const rejectOrder=invoice('secondary',s1.id,[{productId:zeroProduct.id,qty:2}],{customerId:messageCustomer.id});await ok(await commerce.POST(request(rejectOrder)));identity=owner;
+ await ok(await commerce.PATCH(request({id:rejectOrder.id,revision:1,requestId:crypto.randomUUID(),action:'rejectOrder',reason:'Order not approved'})));assert(sql.prepare('SELECT message FROM whatsapp_outbox WHERE id=?').get('order:'+rejectOrder.id+':2:customer:rejected').message.includes('Your order has been rejected.'));assert.equal(qty(s1.id,zeroProduct.id),0);
+ identity=alice;const removePending=invoice('secondary',s1.id,[{productId:zeroProduct.id,qty:2}],{customerId:messageCustomer.id});await ok(await commerce.POST(request(removePending)));await ok(await commerce.PATCH(request({id:removePending.id,revision:1,requestId:crypto.randomUUID(),action:'delete',reason:'Entered twice'})));assert.equal(sql.prepare('SELECT status FROM invoices WHERE id=?').get(removePending.id).status,'Cancelled');
+ identity=owner;sql.prepare("INSERT INTO period_locks VALUES (?,1,'approx-lock',?,?,?)").run(fieldDate.slice(0,7),new Date().toISOString(),owner.email,'Monthly review');await ok(await commerce.PATCH(request({id:zeroCompany.id,revision:3,requestId:crypto.randomUUID(),action:'delete',reason:'Locked month'})),409);sql.exec('DELETE FROM period_locks');
+ console.log('PASS: approved-order target recognition, quantity/free-unit deductions into negative approximate balances, edits/deletion and reversals, original/updated snapshots, concise customer messages, optional receipt batches, no company inventory or expiry gate, no double counting, ownership and month locks. No external sends.');
 
  // Calculator fields are server-validated and landing cost never reaches MR responses.
  identity=owner;
@@ -760,6 +760,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  await ok(await commerce.PATCH(request({...customEdit,requestId:crypto.randomUUID()})),409);
  identity=owner;await ok(await commerce.PATCH(request({id:customRequest.id,revision:2,requestId:crypto.randomUUID(),action:'approveOrder'})),409);
  let customReview=await ok(await approvals.GET());await ok(await commerce.PATCH(request({action:'approve',requestId:customEditId,hash:customReview.hash})));customStored=getOrder(customRequest.id);assert.equal(customStored.accepted,0);assert.equal(customStored.revision,3);assert.equal(JSON.parse(customStored.items)[0].free,10);assert.equal(JSON.parse(customStored.items)[0].rate,8000);assert.equal(agencyMessages(customRequest.id).length,1);
+ const reapprovalCard=(await ok(await approvals.GET())).requests.find(r=>r.kind==='order_approval'&&r.record_id===customRequest.id);const reviewedComparison=JSON.parse(reapprovalCard.body).editComparison;assert.equal(JSON.parse(reviewedComparison.beforeOrder.items)[0].free,8);assert.equal(reviewedComparison.proposedItems[0].free,10);
  await ok(await commerce.PATCH(request({id:customRequest.id,revision:3,requestId:crypto.randomUUID(),action:'approveOrder'})));assert.equal(getOrder(customRequest.id).accepted,1);assert.equal(agencyMessages(customRequest.id).length,2);
  // A not-yet-approved standard order must not bypass a subsequently requested custom offer.
  identity=alice;const waitingCustom=invoice('secondary',s1.id,[{productId:customProduct.id,qty:10,scheme:'none'}],{customerId:messageCustomer.id});await ok(await commerce.POST(request(waitingCustom)));const waitingCustomEdit=crypto.randomUUID();await ok(await commerce.PATCH(request({id:waitingCustom.id,revision:1,requestId:waitingCustomEdit,lines:[{productId:customProduct.id,qty:10,scheme:'other',customPaid:10,customFree:3}]})));
@@ -769,13 +770,16 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  identity=owner;await ok(await commerce.POST(request({action:'approveCustomScheme',requestId:customCompany.id})));assert.equal(getOrder(customCompany.id).accepted,0);assert.equal(JSON.parse(getOrder(customCompany.id).items)[0].rate,7000);
  await ok(await commerce.PATCH(request({id:customCompany.id,revision:1,requestId:crypto.randomUUID(),action:'status',status:'Delivered'})),403);
  await ok(await commerce.PATCH(request({id:customCompany.id,revision:1,requestId:crypto.randomUUID(),action:'approveOrder'})));
- await ok(await commerce.PATCH(request({id:customCompany.id,revision:2,requestId:crypto.randomUUID(),action:'status',status:'Delivered'})));assert.equal(qty('company-stock',customProduct.id),87);assert.equal(qty(s1.id,customProduct.id),100);assert.equal(agencyMessages(customCompany.id).length,0);
+ await ok(await commerce.PATCH(request({id:customCompany.id,revision:2,requestId:crypto.randomUUID(),action:'status',status:'Delivered'})));assert.equal(qty('company-stock',customProduct.id),100);assert.equal(qty(s1.id,customProduct.id),70);assert.equal(agencyMessages(customCompany.id).length,0);
  identity=alice;await ok(await commerce.PATCH(request({id:customCompany.id,revision:3,requestId:crypto.randomUUID(),lines:[{productId:customProduct.id,qty:10,scheme:'other',customPaid:10,customFree:5}],notes:'Change completed offer'})),409);
  // Rejection keeps the existing offer, and cancellation resolves any outstanding request.
  identity=alice;const rejectedEditId=crypto.randomUUID();await ok(await commerce.PATCH(request({...customEdit,revision:4,requestId:rejectedEditId})));
  identity=owner;await ok(await commerce.PATCH(request({action:'reject',requestId:rejectedEditId})),400);await ok(await commerce.PATCH(request({action:'reject',requestId:rejectedEditId,reason:'Retain the current approved scheme'})));assert.equal(getOrder(customRequest.id).revision,4);assert.equal(getOrder(customRequest.id).accepted,1);await ok(await commerce.PATCH(request({action:'reject',requestId:rejectedEditId,reason:'Duplicate review'})),409);
  identity=alice;const cancelledEditId=crypto.randomUUID();await ok(await commerce.PATCH(request({...customEdit,revision:4,requestId:cancelledEditId})));identity=owner;await ok(await commerce.PATCH(request({id:customRequest.id,revision:4,requestId:crypto.randomUUID(),action:'status',status:'Cancelled',reason:'Customer withdrew the order'})));assert.equal(sql.prepare('SELECT status FROM workflow_requests WHERE id=?').get(cancelledEditId).status,'Rejected');assert(!sql.prepare('SELECT id FROM stock_reservations WHERE order_id=?').get(customRequest.id));
  identity=alice;
+ // An MR can withdraw a custom company offer after scheme review, before order approval.
+ const withdrawOffer={...customCompany,id:crypto.randomUUID()};await ok(await commerce.POST(request(withdrawOffer)));identity=owner;await ok(await commerce.POST(request({action:'approveCustomScheme',requestId:withdrawOffer.id})));assert.equal(getOrder(withdrawOffer.id).accepted,0);identity=alice;
+ await ok(await commerce.PATCH(request({id:withdrawOffer.id,revision:1,requestId:crypto.randomUUID(),action:'delete',reason:'Customer withdrew before order approval'})));assert.equal(getOrder(withdrawOffer.id).status,'Cancelled');assert(!(await ok(await reports.GET(reportURL(alice.email,fieldDate.slice(0,7))))).tables.find(t=>t.title==='Agency stock reconciliation at month end').rows.some(r=>String(r[0]).includes('Direct company')));assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM stock_movements WHERE invoice_id=?').get(withdrawOffer.id).n,0);
  // Validation, draft persistence, rejection, month locks and replay resistance.
  const badCustom=customOrder();for(const bad of [{customPaid:0},{customFree:0},{customFree:1.5},{customFree:undefined},{proposedFree:1}])await ok(await commerce.POST(request({...badCustom,id:crypto.randomUUID(),lines:[{...badCustom.lines[0],...bad}]})),400);
  const rejectedCustom=customOrder();await ok(await commerce.POST(request(rejectedCustom)));identity=owner;await ok(await commerce.POST(request({action:'rejectCustomScheme',requestId:rejectedCustom.id})),400);await ok(await commerce.POST(request({action:'rejectCustomScheme',requestId:rejectedCustom.id,reason:'Offer exceeds permitted free units'})));assert.equal(sql.prepare('SELECT status FROM workflow_requests WHERE id=?').get(rejectedCustom.id).status,'Rejected');assert(!getOrder(rejectedCustom.id));assert.equal(agencyMessages(rejectedCustom.id).length,0);await ok(await commerce.POST(request({action:'approveCustomScheme',requestId:rejectedCustom.id})),409);
@@ -792,16 +796,47 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  console.log('PASS: custom scheme request before order approval for both channels, frozen rates, multi-product quantities, MR permissions, draft persistence, pending-edit forwarding block, separate reapproval, rejection, replay and month locks. No external sends.');
 
 
+ // Existing installations migrate once, atomically, without rewriting invoices or approved reports.
+ const modelMigration=process.env.MONGO_TEST_MODE==='model'?require('./mongo-model.cjs')():null;
+ const migrationDB=modelMigration?.db||testClient.db(process.env.MONGODB_DB+'_migration'),migrationClient=modelMigration?.client||testClient;
+ try{
+  await (await import('../scripts/mongo-common.mjs')).setup(migrationDB);
+  const migrationOrders=[
+   {id:'old-approved',stockist_id:'agency',accepted:1,status:'Placed',product:'approved',qty:30,free:8},
+   {id:'old-delivered',stockist_id:'agency',accepted:1,status:'Delivered',product:'delivered',qty:4,free:1},
+   {id:'old-company',stockist_id:'company-stock',accepted:1,status:'Delivered',product:'company',qty:3,free:1},
+   {id:'old-pending',stockist_id:'agency',accepted:0,status:'Placed',product:'pending',qty:6,free:2},
+   {id:'old-cancelled',stockist_id:'agency',accepted:1,status:'Cancelled',product:'cancelled',qty:2,free:0},
+   {id:'old-no-balance',stockist_id:'agency',accepted:1,status:'Placed',product:'missing',qty:7,free:0},
+  ].map(({product,qty,free,...o})=>({...o,kind:'secondary',date:'2020-01-15',items:JSON.stringify([{productId:product,qty,free}])}));
+  await migrationDB.collection('invoices').insertMany(migrationOrders);
+  await migrationDB.collection('stock_balances').insertMany([['agency','approved',10],['agency','delivered',5],['company-stock','company',6],['agency','pending',2],['agency','cancelled',8]].map(([stockist_id,product_id,quantity])=>({id:stockist_id+'|'+product_id,stockist_id,product_id,quantity})));
+  await migrationDB.collection('stock_movements').insertMany([['old-delivered','agency','delivered',-5],['old-company','company-stock','company',-4],['old-cancelled','agency','cancelled',-2]].map(([invoice_id,stockist_id,product_id,quantity])=>({id:invoice_id,invoice_id,stockist_id,product_id,quantity})));
+  await migrationDB.collection('stock_reservations').insertMany(migrationOrders.map(o=>({id:o.id+'|'+JSON.parse(o.items)[0].productId,order_id:o.id,stockist_id:o.stockist_id,product_id:JSON.parse(o.items)[0].productId,quantity:999})));
+  await migrationDB.collection('report_snapshots').insertOne({id:'closed-report',month:'2020-01',payload:'Approved report must remain byte-for-byte unchanged'});
+  const originalMigrationOrders=await migrationDB.collection('invoices').find().toArray(),originalReport=await migrationDB.collection('report_snapshots').findOne({id:'closed-report'}),beforeMigration=await migrationDB.collection('stock_balances').find().toArray();
+  const reconcile=load(path.join(root,'lib/mongo/order-inventory.ts')).reconcileOrderInventory;
+  async function migrate(fail=false){const s=migrationClient.startSession();try{await s.withTransaction(async()=>{await reconcile(migrationDB,s);if(fail)throw Error('Injected migration rollback');},{readConcern:{level:'snapshot'},writeConcern:{w:'majority'},readPreference:'primary'});}finally{await s.endSession();}}
+  await assert.rejects(migrate(true),/Injected migration rollback/);
+  assert.deepEqual(await migrationDB.collection('stock_balances').find().toArray(),beforeMigration);assert.equal(await migrationDB.collection('stock_movements').countDocuments(),3);assert.equal((await migrationDB.collection('_control').findOne({_id:'ledger'})).order_inventory_policy,undefined);
+  if(modelMigration)await migrate();else await Promise.all([migrate(),migrate()]);
+  const migratedQty=async(s,p)=>(await migrationDB.collection('stock_balances').findOne({stockist_id:s,product_id:p})).quantity;
+  assert.equal(await migratedQty('agency','approved'),-28);assert.equal(await migratedQty('agency','delivered'),5);assert.equal(await migratedQty('company-stock','company'),10);assert.equal(await migratedQty('agency','pending'),2);assert.equal(await migratedQty('agency','cancelled'),10);assert.equal(await migratedQty('agency','missing'),-7);
+  const retainedReservations=await migrationDB.collection('stock_reservations').find().toArray();assert.equal(retainedReservations.length,1);assert.equal(retainedReservations[0].order_id,'old-pending');assert.equal(retainedReservations[0].quantity,8);
+  assert.equal(await migrationDB.collection('stock_movements').countDocuments(),7);await migrate();assert.equal(await migrationDB.collection('stock_movements').countDocuments(),7);
+  assert.deepEqual(await migrationDB.collection('invoices').find().toArray(),originalMigrationOrders);assert.deepEqual(await migrationDB.collection('report_snapshots').findOne({id:'closed-report'}),originalReport);
+  console.log('PASS: inventory policy migration corrects legacy approved/company/cancelled effects, preserves completed deductions, allows missing balances, retains pending demand, rolls back failures, is idempotent, and preserves invoices and closed reports.');
+ }finally{if(!modelMigration)await migrationDB.dropDatabase();}
+
  if(process.env.MONGO_TEST_MODE!=='model'){
   const native=load(path.join(root,'lib/mongo/database.ts')).mongoDatabase;
-  const {physicalStockGuard}=load(path.join(root,'lib/order-stock.ts'));
   await native.prepare('INSERT INTO stock_balances(id,stockist_id,product_id,quantity) VALUES (?,?,?,?)').bind('race|p','race','p',10).run();
-  const reserve=(id)=>native.batch([native.prepare('UPDATE stock_balances SET quantity=quantity-? WHERE stockist_id=? AND product_id=?').bind(7,'race','p'),native.prepare('INSERT INTO stock_movements(id,invoice_id,stockist_id,product_id,quantity,created) VALUES (?,?,?,?,?,?)').bind(id,id,'race','p',-7,new Date().toISOString()),physicalStockGuard('race','p')]);
+  const reserve=(id)=>native.batch([native.prepare('UPDATE stock_balances SET quantity=quantity-? WHERE stockist_id=? AND product_id=?').bind(7,'race','p'),native.prepare('INSERT INTO stock_movements(id,invoice_id,stockist_id,product_id,quantity,created) VALUES (?,?,?,?,?,?)').bind(id,id,'race','p',-7,new Date().toISOString())]);
   const outcomes=await Promise.allSettled([reserve('race-a'),reserve('race-b')]);
-  assert.equal(outcomes.filter(x=>x.status==='fulfilled').length,1);
-  assert.equal(await mongo.collection('stock_movements').countDocuments({stockist_id:'race'}),1);
-  assert.equal((await mongo.collection('stock_balances').findOne({id:'race|p'})).quantity,3);
-  console.log('PASS: real replica-set concurrent physical stock deductions prevent oversupply and roll back the losing completion.');
+  assert.equal(outcomes.filter(x=>x.status==='fulfilled').length,2);
+  assert.equal(await mongo.collection('stock_movements').countDocuments({stockist_id:'race'}),2);
+  assert.equal((await mongo.collection('stock_balances').findOne({id:'race|p'})).quantity,-4);
+  console.log('PASS: real replica-set concurrent approximate deductions both commit without lost updates or a stock-shortage gate.');
  }
 
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(stopMongo);

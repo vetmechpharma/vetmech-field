@@ -19,7 +19,7 @@ export async function GET(req:Request){try{
  for(const b of movements){const invoice=lookup.get(b.invoice_id),day=new Date(b.created).toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}),key=b.stockist_id+'|'+b.product_id;
  if(!sums.has(key))sums.set(key,{stockistId:b.stockist_id,productId:b.product_id,opening:0,received:0,issued:0,returned:0,closing:0,physical:0,reserved:0,available:0});
  const s=sums.get(key);if(day<from)s.opening+=b.quantity;if(day<=to)s.closing+=b.quantity;
- if(day>=from&&day<=to){const type=b.quantity<0?'Delivered / adjustment out':['primary','company_receipt'].includes(invoice?.kind||'')?'Stock receipt':'Return / adjustment in';if(b.quantity<0)s.issued-=b.quantity;else if(['primary','company_receipt'].includes(invoice?.kind||''))s.received+=b.quantity;else s.returned+=b.quantity;details.push({id:b.id,stockistId:b.stockist_id,productId:b.product_id,date:day,number:invoice?.number||b.invoice_id,type,quantity:b.quantity});}
+ if(day>=from&&day<=to){const type=b.quantity<0?'Approved order / adjustment out':['primary','company_receipt'].includes(invoice?.kind||'')?'Stock receipt':'Return / adjustment in';if(b.quantity<0)s.issued-=b.quantity;else if(['primary','company_receipt'].includes(invoice?.kind||''))s.received+=b.quantity;else s.returned+=b.quantity;details.push({id:b.id,stockistId:b.stockist_id,productId:b.product_id,date:day,number:invoice?.number||b.invoice_id,type,quantity:b.quantity});}
  }
  const batches=batchInventory(invoices.map(i=>({...i,items:JSON.parse(i.items)})),balances);
  for(const b of stockAvailability(balances,reservations,batches,indiaDay())){

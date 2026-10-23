@@ -13,7 +13,9 @@ export async function GET(){try{
  const requests=(await db().prepare("SELECT * FROM workflow_requests WHERE kind IN ('customer_access','order_edit') ORDER BY created DESC").all<any>()).results.filter(r=>m.role==='admin'||r.mr_email===m.email);
  const records=m.role==='admin'?(await db().prepare("SELECT id,data FROM records WHERE kind IN ('Customers','Routes','Products','Stockists')").all<any>()).results.map(r=>({...r,data:JSON.parse(r.data)})):[];
  const orders=(await (m.role==='admin'?db().prepare("SELECT * FROM invoices WHERE kind='secondary'"):db().prepare("SELECT * FROM invoices WHERE kind='secondary' AND mr_email=?").bind(m.email)).all<any>()).results;
- const newOrders=orders.filter(o=>o.status==='Placed'&&!o.accepted&&!pendingCustomEdit(requests,o.id)).map(o=>({id:'approval:'+o.id,kind:'order_approval',status:'Pending',mr_email:o.mr_email,record_id:o.id,created:o.created,reason:'',body:JSON.stringify({revision:o.revision,number:o.number})}));
+ const edits=(await db().prepare('SELECT * FROM order_edits').all<any>()).results;
+ for(const request of requests){if(request.kind!=='order_edit')continue;const body=JSON.parse(request.body),edit=edits.find(e=>e.id===request.id);if(edit){body.beforeOrder=JSON.parse(edit.before_data);body.afterOrder=JSON.parse(edit.after_data);body.proposedItems=body.afterOrder.status==='Cancelled'?[]:JSON.parse(body.afterOrder.items);}request.body=JSON.stringify(body);}
+ const newOrders=orders.filter(o=>o.status==='Placed'&&!o.accepted&&!pendingCustomEdit(requests,o.id)).map(o=>({id:'approval:'+o.id,kind:'order_approval',status:'Pending',mr_email:o.mr_email,record_id:o.id,created:o.created,reason:'',body:JSON.stringify({revision:o.revision,number:o.number,editComparison:requests.filter(r=>r.kind==='order_edit'&&r.status==='Approved'&&r.record_id===o.id).map(r=>JSON.parse(r.body)).find(b=>b.afterOrder?.revision===o.revision)})}));
  let stock:any[]=[];
  if(m.role==='admin'){
   const [balances,reservations,batchInvoices]=await Promise.all([db().prepare('SELECT * FROM stock_balances').all<any>(),db().prepare('SELECT * FROM stock_reservations').all<any>(),db().prepare('SELECT * FROM invoices').all<any>()]);

@@ -386,3 +386,22 @@
 .custom-scheme-fields small{display:block;margin-top:8px;color:#315779}
 .custom-scheme-quantities input{min-height:44px;width:100%}
 @media(max-width:440px){.custom-scheme-quantities{grid-template-columns:1fr}}
+
+/* Order change review: explicit labels and colours stay readable on small screens. */
+.order-edit-request.request-pending{border-inline-start:4px solid #d97706;background:#fffbeb}
+.order-edit-request.request-approved,.order-history-change.request-approved{border-inline-start:4px solid #0d9488;background:#f0fdfa}
+.order-edit-request.request-rejected{border-inline-start:4px solid #be123c;background:#fff1f2}
+.request-status{padding:8px 12px;border-radius:8px;font-size:.85rem}
+.request-status.request-approved{background:#ccfbf1;color:#115e59}
+.request-status.request-pending{background:#fef3c7;color:#92400e}
+.request-status.request-rejected{background:#ffe4e6;color:#9f1239}
+.order-change-preview .change-before{background:#fff1f2;color:#9f1239}
+.order-change-preview .change-after{background:#ecfdf5;color:#065f46}
+.change-legend{display:flex;gap:8px;flex-wrap:wrap}
+.change-legend span{padding:4px 8px;border-radius:6px;font-size:.8rem;font-weight:600}
+.order-change-preview td small{display:block;white-space:normal}
+.order-change-preview table{min-width:660px}
+.order-history-change{padding:10px;margin-block:8px;border-radius:8px;min-width:0}
+.order-history-change summary{cursor:pointer;font-size:.85rem;line-height:1.5}
+.order-change-preview .report-scroll{max-width:100%;overflow:auto}
+@media(max-width:600px){.order-change-preview{min-width:0}.order-change-preview td,.order-change-preview th{padding:8px}.order-change-preview p{font-size:.84rem;overflow-wrap:anywhere}}

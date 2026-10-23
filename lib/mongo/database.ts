@@ -3,6 +3,7 @@ import {mongoClient,mongoDB} from './client';
 import schema from './schema.json';
 import {Parser,parse,mongoExpr,evaluate,split,fieldName,type Expr} from './expressions';
 import {specialQuery} from './special';
+import {ensureOrderInventory} from './order-inventory';
 export type Context={db:Db,session?:ClientSession};
 export type Result={results:any[],meta:{changes:number},success:true};
 export const result=(results:any[]=[],changes=0):Result=>({results,meta:{changes},success:true});
@@ -34,5 +35,5 @@ export async function execute(c:Context,q:string,args:any[]=[]):Promise<Result>{
 // Serialize business writes across Node processes. The shared revision document
 // prevents snapshot write-skew (e.g. a period closing alongside a stock posting).
 export async function transaction<T>(work:(c:Context)=>Promise<T>){const client=await mongoClient(),db=await mongoDB(),session=client.startSession();try{return await session.withTransaction(async()=>{const lock=await db.collection('_control').updateOne({_id:'ledger' as any},{$inc:{revision:1}},{session});if(lock.matchedCount!==1)throw Error('Run db:setup before starting the application');return work({db,session})},{readConcern:{level:'snapshot'},writeConcern:{w:'majority'},readPreference:'primary'});}catch(e:any){if(e.code===11000)throw Error('UNIQUE constraint: duplicate entry');throw e}finally{await session.endSession()}}
-export class Statement{constructor(public query:string,public args:any[]=[]){this.query=query.trim().replace(/\s+/g,' ')}bind(...args:any[]){return new Statement(this.query,args)}async result(){return this.query.startsWith('SELECT ')?execute({db:await mongoDB()},this.query,this.args):transaction(c=>execute(c,this.query,this.args))}async first<T=Record<string,any>>(){return (await this.result()).results[0] as T||null}async all<T=Record<string,any>>(){const r=await this.result();return {...r,results:r.results as T[]}}async run(){return this.result()}}
-export const mongoDatabase={prepare:(q:string)=>new Statement(q),batch:(statements:Statement[])=>transaction(async c=>{const out:Result[]=[];for(const s of statements)out.push(await execute(c,s.query,s.args));return out})};
+export class Statement{constructor(public query:string,public args:any[]=[]){this.query=query.trim().replace(/\s+/g,' ')}bind(...args:any[]){return new Statement(this.query,args)}async result(){await ensureOrderInventory();return this.query.startsWith('SELECT ')?execute({db:await mongoDB()},this.query,this.args):transaction(c=>execute(c,this.query,this.args))}async first<T=Record<string,any>>(){return (await this.result()).results[0] as T||null}async all<T=Record<string,any>>(){const r=await this.result();return {...r,results:r.results as T[]}}async run(){return this.result()}}
+export const mongoDatabase={prepare:(q:string)=>new Statement(q),batch:async(statements:Statement[])=>{await ensureOrderInventory();return transaction(async c=>{const out:Result[]=[];for(const s of statements)out.push(await execute(c,s.query,s.args));return out})}};

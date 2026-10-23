@@ -1,12 +1,12 @@
 import {db,HttpError} from './server';
 import {communicationEnv,smtpAvailable} from './communication-runtime';
-import {defaultTemplates,TEMPLATE_VERSION,type TemplateKey,renderMessage} from './message-templates';
+import {configuredTemplates,TEMPLATE_VERSION,type TemplateKey,renderMessage} from './message-templates';
 export type CommunicationConfig={whatsappEnabled:boolean;whatsappUrl:string;whatsappKey:string;whatsappSession:string;adminPhone:string;smtpEnabled:boolean;smtpHost:string;smtpPort:number;smtpUser:string;smtpPassword:string;smtpFrom:string;adminEmail:string;templateVersion:number;templates:Record<TemplateKey,string>};
 export async function communicationConfig():Promise<CommunicationConfig>{
  const row=await db().prepare("SELECT data FROM communication_settings WHERE id='main'").first<{data:string}>();
  const old=await db().prepare("SELECT data FROM records WHERE id='whatsapp-settings'").first<{data:string}>();
  const saved=row?JSON.parse(row.data):{};
- return {whatsappEnabled:!!communicationEnv.WHATSAPP_WEBHOOK_URL,whatsappUrl:communicationEnv.WHATSAPP_WEBHOOK_URL||'',whatsappSession:communicationEnv.WHATSAPP_SESSION||'primary',adminPhone:JSON.parse(old?.data||'{}')['Admin WhatsApp number']||'',smtpEnabled:false,smtpHost:'',smtpPort:587,smtpUser:'',smtpFrom:'',adminEmail:'',...saved,whatsappKey:saved.whatsappKey?await unseal(saved.whatsappKey):communicationEnv.WHATSAPP_API_KEY||'',smtpPassword:saved.smtpPassword?await unseal(saved.smtpPassword):'',templateVersion:TEMPLATE_VERSION,templates:{...defaultTemplates(),...(saved.templateVersion===TEMPLATE_VERSION?saved.templates:{})}};
+ return {whatsappEnabled:!!communicationEnv.WHATSAPP_WEBHOOK_URL,whatsappUrl:communicationEnv.WHATSAPP_WEBHOOK_URL||'',whatsappSession:communicationEnv.WHATSAPP_SESSION||'primary',adminPhone:JSON.parse(old?.data||'{}')['Admin WhatsApp number']||'',smtpEnabled:false,smtpHost:'',smtpPort:587,smtpUser:'',smtpFrom:'',adminEmail:'',...saved,whatsappKey:saved.whatsappKey?await unseal(saved.whatsappKey):communicationEnv.WHATSAPP_API_KEY||'',smtpPassword:saved.smtpPassword?await unseal(saved.smtpPassword):'',templateVersion:TEMPLATE_VERSION,templates:configuredTemplates(saved)};
 }
 export function publicConfig(c:CommunicationConfig){const {whatsappKey,smtpPassword,...safe}=c;return {...safe,hasWhatsappKey:!!whatsappKey,hasSmtpPassword:!!smtpPassword,secretsReady:!!communicationEnv.COMMUNICATIONS_SECRET,smtpAvailable};}
 async function key(){const raw=communicationEnv.COMMUNICATIONS_SECRET;if(!raw||raw.length<32)throw new HttpError(400,'Add COMMUNICATIONS_SECRET to the server environment before saving API or SMTP passwords.');return crypto.subtle.importKey('raw',await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw)),'AES-GCM',false,['encrypt','decrypt']);}

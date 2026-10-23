@@ -1,3 +1,4 @@
+import {secondarySale} from './order-workflow';
 import {customerVisible,idList} from './field-rules';
 import type {Member} from './permissions';
 import type {ReportTable,Row} from './monthly-report';
@@ -10,7 +11,7 @@ export function routeInsights(m:Member,month:string,compare:string,inactive:numb
  const allOrders=invoices.filter(i=>i.kind==='secondary'&&i.status!=='Cancelled'&&i.mr_email===m.email).map(i=>({id:i.id,customer:i.customer_id,date:i.date,net:i.subtotal,number:i.number}));
  const legacy=records.filter(r=>['Secondary sales','Orders'].includes(r.kind)&&!r.data['Invoice ID']&&belongs(r)&&r.data.Status!=='Cancelled');
  const orderHistory=[...allOrders,...legacy.map(r=>({id:r.id,customer:customerID(r),date:r.data.Date||r.created.slice(0,10),net:r.kind==='Secondary sales'?Math.round(Number(r.data.Quantity||0)*Number(r.data.Rate||0)*100):0,number:r.data['Order number']||r.data['Invoice number']||'Legacy entry'}))];
- const salesHistory=[...allOrders.filter(o=>{const i=invoices.find(i=>i.id===o.id);return !i?.status||i.status==='Delivered'}),...legacy.filter(r=>r.kind==='Secondary sales').map(r=>({id:r.id,customer:customerID(r),date:r.data.Date||r.created.slice(0,10),net:Math.round(Number(r.data.Quantity||0)*Number(r.data.Rate||0)*100),number:'Legacy sale'}))];
+ const salesHistory=[...allOrders.filter(o=>{const i=invoices.find(i=>i.id===o.id);return !!i&&secondarySale(i)}),...legacy.filter(r=>r.kind==='Secondary sales').map(r=>({id:r.id,customer:customerID(r),date:r.data.Date||r.created.slice(0,10),net:Math.round(Number(r.data.Quantity||0)*Number(r.data.Rate||0)*100),number:'Legacy sale'}))];
  const activityIDs=new Set([...visits.map(customerID),...orderHistory.map(o=>o.customer)]);
  const customers=records.filter(r=>r.kind==='Customers'&&(customerVisible(m,{...r,data:JSON.stringify(r.data)} as any)||activityIDs.has(r.id))&&(r.created.slice(0,10)<end));
  const routeName=(id:string)=>records.find(r=>r.id===id)?.data.Name||'',routes=[...new Set([...idList(m.route_ids).map(routeName),...customers.map(c=>c.data.Route||'Unassigned')])].filter(Boolean).sort();

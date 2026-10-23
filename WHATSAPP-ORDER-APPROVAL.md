@@ -1,6 +1,6 @@
 # WhatsApp order approval update
 
-VETMECH Field Force MR App · 18 October 2026
+VETMECH Field Force MR App · 23 October 2026
 
 ## Configure the new gateway
 
@@ -21,27 +21,37 @@ Use **Send test to saved Admin contact** when ready. This button sends a real me
 
 | Event | Customer / Admin messages | Stockist message | MR order status |
 | --- | --- | --- | --- |
-| New stockist order | New order awaiting approval | None | Pending Admin approval |
-| New company order at approved pricing | New order awaiting approval | None | Pending Admin approval |
-| Company pricing departure | Proposal awaiting approval | None | Pending pricing proposal |
-| Admin approves stockist order | Approval notification | Customer name, phone, address and complete product list | Forwarded to stockist after gateway acceptance of every message part |
-| Admin approves company order | Approval notification | None | Approved — awaiting company completion |
+| New stockist order | Admin review notification only | None | Pending Admin approval |
+| New company order at approved pricing | Admin review notification only | None | Pending Admin approval |
+| Company pricing departure | Admin proposal review only | None | Pending pricing proposal |
+| Admin approves stockist order | Customer: order received; Admin: approved | Customer name, phone, address and complete product list | Forwarded to stockist after gateway acceptance of every message part |
+| Admin approves company order | Customer: order received; Admin: approved | None | Approved — awaiting company completion |
 | Admin completes company order | Completion notification | None | Completed |
 | Approved order amendment | Revised order details | Revised details for stockist orders | Updated revision and forwarding status |
-| Cancellation / rejection | Cancellation message | Cancellation only if the stockist order had already been approved | Cancelled |
+| Cancellation / rejection | Separate cancelled / rejected message | Cancellation only if the stockist order had already been approved | Cancelled |
 | MR closes a visit | Customer thank-you with linked orders, including pending direct-pricing proposals | None | Visit closed |
 
-Admin can approve new orders in **Approvals** or **Orders**. Direct-pricing proposals appear in both areas; approving the proposal also approves the company order, so a second approval is unnecessary. Approval rechecks current MR/customer access. Orders and approvals use product quantities and are allowed when stock is unavailable or expired; batch allocation occurs only on confirmed company supply. Historical delivered stockist orders remain intact and appear as **Previously supplied**.
+Admin can approve new orders in **Approvals** or **Orders**. Direct-pricing proposals appear in both areas; approving the proposal also approves the company order, so a second approval is unnecessary. Approval rechecks current MR/customer access. Orders use product quantities. Stock availability, batch and expiry never block order approval or company completion. Custom schemes still require scheme approval followed by separate order approval. Historical delivered stockist orders remain intact and appear as **Previously supplied**.
 
 Only Admin can complete an approved company order. The server rejects stockist completion and MR approval/completion, even if called outside the web interface. MRs can edit an unapproved order within its open month. Edits after approval require Admin review; original product rates remain unless Admin explicitly approves repricing. Month locks still block order creation, editing, cancellation, approval and company completion.
 
 ## Stock and reports
 
-Placing an order records requested/reserved units at product level, including demand awaiting replenishment. No batch is required in the MR order form. Stock screens show batch/expiry details, available unexpired quantities, and shortages separately. Custom company-pricing proposals reserve units only when approved. Approval and forwarding do not deduct physical stock. **Forwarded stockist orders remain reserved** because forwarding does not confirm supply; there is no new stockist Completed action.
+Unapproved stockist orders record pending demand without deducting stock. Admin approval deducts paid plus free units from the approximate stockist balance. Approval is allowed even when the balance becomes negative. Forwarding confirms gateway acceptance, not customer delivery; there is no stockist completion action. Edits adjust only the quantity difference, and cancellation/deletion restores any posted deduction. Primary invoice edits and deletion also adjust this approximate balance.
 
-Company completion allocates unexpired batches automatically and deducts company stock only. Admin can choose which approved order to fulfil first; other orders remain awaiting stock if necessary. Completion is blocked when unexpired physical stock is insufficient. Cancellation releases reserved stock. Existing historical delivered stockist movements are preserved. Delivered-sales achievement continues to count completed company supply and historical delivered stockist sales. Forwarded stockist orders are shown separately in the monthly report and do not silently inflate delivered targets.
+Direct company orders do not reserve, deduct or require company stock. Admin can complete an approved company order without a company receipt, batch or expiry. Order entry and the stock statement show product quantities; historical batch metadata is retained internally.
 
-Month closing requires resolution of unapproved orders and incomplete company orders. Approved stockist orders can remain as reservations; reconciliation still checks those units. Communication failures remain visible in delivery logs and order forwarding status. A later gateway receipt can update communication status without changing a locked month's sales, stock or approved report snapshot.
+**Approved orders in both channels count toward the responsible MR's secondary sales and monthly target, excluding GST, using the original order date.** Company completion never counts twice. Pending, rejected and cancelled orders do not count. Approved quantity/rate edits update achievement and pending target. Reports separate direct company and stockist sales.
+
+An atomic, one-time inventory migration runs on the first application database request after deployment. It deducts previously approved stockist orders that were only reserved, restores legacy company deductions, and avoids double deduction of historical stockist supplies. A failed migration rolls back completely and retries on a later request. It does not rewrite orders or approved monthly report snapshots. Open reports use the new approved-order basis; closed reports retain their saved figures. Do not run an older release with the previous stock rules alongside this release.
+
+Month closing requires resolution of unapproved orders, incomplete company orders and pending changes. Negative approximate balances alone do not block closing; the stock movement ledger and pending-demand reservations must still reconcile. A later gateway receipt can update communication status without changing a locked month's sales, stock or approved report snapshot.
+
+## Edit and delete controls
+
+Admin can edit or delete orders while the month is open. An MR can edit/delete their unapproved order in its current open month; approved or completed orders require an Admin change request. A month lock blocks both roles. Deletion cancels and hides the active order while preserving its history, rather than erasing audit evidence. Use **Show cancelled / deleted** to include those records.
+
+Approvals show original versus requested paid/free quantities, rates, schemes, values, notes and stock effects. Original values are rose, updated values green; pending requests are amber and approved edit requests teal. Approved history uses captured snapshots even after catalogue prices or the order change again. Repricing at current catalogue prices remains an explicit approval option.
 
 ## MR order entry
 
@@ -49,22 +59,25 @@ Select the customer, supply source, product, quantity and an optional approved s
 
 ## Editable templates
 
-Admin → WhatsApp & email → Message templates contains eight templates:
+Admin → WhatsApp & email → Message templates contains separate customer, Admin, stockist and visit templates. Customer order received/updated/rejected/cancelled/completed messages use one greeting and this layout:
 
-1. Customer order awaiting approval.
-2. Admin order review.
-3. Order approved.
-4. Approved order forwarded to stockist.
-5. Company order completed.
-6. Revised order.
-7. Cancelled / rejected order.
-8. Visit thank-you.
+```text
+Dear Dr. LOKESH T,
+Your order has been received.
+Order number: ORD-20261018-1E81068F
+Date: 18/10/2026
+MR: MATHEESH KUMAR
+ZEBUCAL LIQ · Packing: 1 LTR · Qty: 30 + Free qty: 8
+Thank you for your support.
+Regards
+*VETMECH PHARMA*
+```
 
-All begin with `Dear Dr. {{customer_name}}` and include the relevant date. Order product lines contain product name, packing, paid quantity and free quantity. Rates, totals, invoice values and free-text order notes are not inserted into WhatsApp or corresponding email messages. Existing `Dr.` prefixes are normalized so greetings do not repeat the title.
+The received message is sent after Admin approval. Accepted edits send “Your order has been updated” with updated quantities. Rejected and cancelled orders use their respective wording. A custom-scheme amendment sends its update after the subsequent order approval. No duplicate greeting, supply source, revision, status block, customer line, price or value is inserted into customer order messages. WhatsApp displays the company name in bold. Internal Admin/stockist templates retain routing and customer contact details.
 
-Required placeholders are validated when saving. Order templates require customer name, date, order number and items. Visit templates require customer name, MR name, date and linked orders. The stockist-forward template also requires customer phone and address. A rendered message longer than 4,096 characters is split into numbered parts, each with a stable idempotency key.
+All templates include `Dear Dr. {{customer_name}}` and a date. Existing `Dr.` prefixes are normalized. Required placeholders are validated when saving. Order templates require customer name, date, order number and items. Visit templates require customer name, MR name, date and linked orders. A message longer than 4,096 characters splits into numbered parts with stable idempotency keys.
 
-Previous template versions reset to these quantity-only defaults, retaining gateway and SMTP credentials. Unsent messages created before this update are superseded on retry, preventing old prices or unapproved stockist forwarding from being sent. Historical communication logs are retained for their existing 30-day period.
+Template version 3 refreshes legacy customer order wording. Version 2 visit, Admin review and stockist-forward customizations are retained, along with gateway/SMTP settings. Subsequent version 3 customizations are preserved. Existing delivered messages are not resent. Detailed communication logs retain their existing 30-day expiry.
 
 ## Delivery logs and retries
 

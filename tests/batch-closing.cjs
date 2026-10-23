@@ -12,18 +12,19 @@ rows=batchInventory([...invoices,order],balances,'o');assert.equal(rows.find(r=>
 const legacy=batchInventory([], [{stockist_id:'s',product_id:'p',quantity:9}]);assert.equal(legacy[0].expiry,'');assert.equal(legacy[0].available,9);
 let checklist=closingChecklist('2026-10',[order],[{id:'r',kind:'leave',status:'Pending',body:'{}',created:'2026-10-01',mr_email:'mr'}],balances,[],[{...balances[0],quantity:35}]);assert.equal(checklist[0].items.length,1);assert.equal(checklist[1].items.length,1);assert.equal(checklist[2].items.length,1);checklist=closingChecklist('2026-10',[],[],balances,[],[{...balances[0],quantity:35}]);assert.equal(checklist.flatMap(c=>c.items).length,0);
 assert.equal(closingChecklist('2026-10',[{...order,accepted:1}],[],balances,[{stockist_id:'s',product_id:'p',quantity:13}],[{...balances[0],quantity:35}])[0].items.length,0);assert.equal(closingChecklist('2026-10',[{...order,stockist_id:'company-stock',accepted:1}],[],[],[],[])[0].items.length,1);
-console.log('PASS: six-month boundaries; FEFO paid/free allocations; expired rejection; reservation, delivery, cancellation, edit release; legacy stock; closing blockers and reconciliation.');
+console.log('PASS: legacy batch utility compatibility, six-month boundaries, historical allocations, closing blockers and reconciliation.');
 
 const {stockAvailability}=load('lib/stock-availability.ts');
 const demand=[{stockist_id:'s',product_id:'p',quantity:50},{stockist_id:'s',product_id:'new',quantity:7}];
 const productStock=stockAvailability(balances,demand,batchInventory(invoices,balances),'2026-10-10');
-assert.equal(productStock[0].available,0);assert.equal(productStock[0].expired,5);assert.equal(productStock[0].shortage,20);assert.equal(productStock[1].quantity,0);assert.equal(productStock[1].shortage,7);
+assert.equal(productStock[0].available,0);assert.equal(productStock[0].expired,0);assert.equal(productStock[0].shortage,15);assert.equal(productStock[1].quantity,0);assert.equal(productStock[1].shortage,7);
 const softOrder={...order,items:[{productId:'p',qty:50,free:0}]};
 rows=batchInventory([...invoices,softOrder],balances,'',true,'2026-10-10');assert.equal(rows.reduce((n,r)=>n+r.reserved,0),30);assert(rows.every(r=>r.available>=0));assert.equal(rows.find(r=>r.batch==='C').reserved,0);
 const completionRows=batchInventory([...invoices,softOrder],balances,'',false,'2026-10-10');const completedLine={productId:'p',name:'Product',qty:30,free:0};allocateBatches(completionRows,'s',[completedLine],'2026-10-10');assert.equal(completedLine.allocations.reduce((n,a)=>n+a.quantity,0),30);
-assert.equal(closingChecklist('2026-10',[{...softOrder,accepted:1}],[],balances,[demand[0]],[{...balances[0],quantity:35}])[2].items.length,0);
-console.log('PASS: shortages are explicit, available quantities are nonnegative, expired batches are excluded from planning, product demand may exceed stock, and completion uses physical stock.');
+assert.equal(closingChecklist('2026-10',[{...softOrder,accepted:0}],[],balances,[demand[0]],[{...balances[0],quantity:35}])[2].items.length,0);
+console.log('PASS: approximate stock planning ignores expiry, exposes shortages without negative availability, and retains historical batch utility compatibility.');
 
+const negativeBalance={stockist_id:'s',product_id:'p',quantity:-12};assert.equal(stockAvailability([negativeBalance],[],[],'2026-10-10')[0].shortage,12);assert.equal(closingChecklist('2026-10',[],[],[negativeBalance],[],[negativeBalance])[2].items.length,0);
 const tourClosing=closingChecklist('2026-10',[],[{id:'tour-change',kind:'tour_change',status:'Pending',mr_email:'mr',created:'2026-09-20',body:JSON.stringify({from:'2026-10-08',programmes:[{month:'2026-10'},{month:'2026-11'}]})}],[],[],[],[{id:'tour-month',kind:'Tour programme',assigned_to:'mr',data:{month:'2026-10',status:'Pending'}},{id:'future-tour',kind:'Tour programme',assigned_to:'mr',data:{month:'2026-11',status:'Pending'}},{id:'approved-tour',kind:'Tour programme',assigned_to:'mr',data:{month:'2026-09',status:'Approved'}}]);
 assert.deepEqual(new Set(tourClosing[1].items.map(i=>i.id)),new Set(['tour-change','tour-month']));
 console.log('PASS: month closing includes pending monthly programmes and affected tour changes, excluding future or reviewed programmes.');
