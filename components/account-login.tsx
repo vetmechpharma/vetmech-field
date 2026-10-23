@@ -1,9 +1,11 @@
 'use client';
-import {useState,type FormEvent} from 'react';
+import {useEffect,useState,type FormEvent} from 'react';
 import {ShieldCheck,BriefcaseBusiness,Eye,EyeOff,LoaderCircle,LockKeyhole,ArrowRight} from 'lucide-react';
 import {APP_NAME,COMPANY_NAME,BRAND_TAGLINE} from '../lib/branding';
 export function AccountLogin(){
  const [role,setRole]=useState<'admin'|'mr'>('mr'),[username,setUsername]=useState(''),[password,setPassword]=useState(''),[show,setShow]=useState(false),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const [resetNotice,setResetNotice]=useState(false);
+ useEffect(()=>{const url=new URL(window.location.href);if(url.searchParams.get('reset')==='complete'){setRole('admin');setResetNotice(true);url.searchParams.delete('reset');window.history.replaceState(null,'',url.pathname+url.search+url.hash);}},[]);
  async function submit(e:FormEvent){e.preventDefault();setBusy(true);setError('');try{const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});const j=await r.json() as {error?:string};if(!r.ok)throw new Error(j.error||'Unable to log in.');location.reload()}catch(e){setError((e as Error).message);setBusy(false)}}
  return <div className="login-page branded-login minimal-login">
   <header className="login-brand brand-header" aria-label={APP_NAME}>
@@ -19,6 +21,7 @@ export function AccountLogin(){
         <button type="button" disabled={busy} aria-pressed={role==='mr'} className={role==='mr'?'primary':'secondary'} onClick={()=>{setRole('mr');setError('')}}><BriefcaseBusiness size={18}/>MR workspace</button>
         <button type="button" disabled={busy} aria-pressed={role==='admin'} className={role==='admin'?'primary':'secondary'} onClick={()=>{setRole('admin');setError('')}}><ShieldCheck size={18}/>Admin</button>
       </div>
+      {resetNotice&&<p className="info-box" role="status">Application data reset completed. Sign in with your existing Admin account.</p>}
       <form onSubmit={submit} className="account-form">
         <label htmlFor="login-username">Username<input id="login-username" autoComplete="username" autoCapitalize="none" spellCheck={false} required minLength={3} maxLength={50} value={username} onChange={e=>setUsername(e.target.value)} placeholder={role==='admin'?'Enter your Admin username':'Enter your MR username'}/></label>
         <label htmlFor="login-password">Password<div className="password-input"><input id="login-password" type={show?'text':'password'} autoComplete="current-password" required maxLength={128} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter your password"/><button className="icon-button" type="button" aria-label={show?'Hide password':'Show password'} aria-pressed={show} onClick={()=>setShow(!show)}>{show?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></label>

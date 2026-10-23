@@ -405,3 +405,25 @@
 .order-history-change summary{cursor:pointer;font-size:.85rem;line-height:1.5}
 .order-change-preview .report-scroll{max-width:100%;overflow:auto}
 @media(max-width:600px){.order-change-preview{min-width:0}.order-change-preview td,.order-change-preview th{padding:8px}.order-change-preview p{font-size:.84rem;overflow-wrap:anywhere}}
+
+/* Application reset stays inside Admin settings and remains readable on small screens. */
+.data-reset-panel{border:1px solid #fda4af;border-radius:16px;margin-block:20px;min-width:0}
+.data-reset-panel h2{display:flex;align-items:center;gap:8px;color:#9f1239}
+.reset-scope{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.reset-scope>div{background:#f8fafc;border-radius:10px;padding:12px;min-width:0}
+.reset-scope strong{color:#334155}.reset-scope p{font-size:13px;line-height:1.6;margin:5px 0 0}
+.reset-warning{padding:12px;border-left:3px solid #e11d48;background:#fff1f2;color:#881337;font-size:13px;line-height:1.6;border-radius:8px}
+.reset-review-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-block:16px 10px}
+.reset-review-heading h3{margin:0}.reset-review-heading span{color:#475569;font-size:13px}
+.reset-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-height:320px;overflow:auto;border:1px solid #e2e8f0;border-radius:10px;padding:8px}
+.reset-counts>div{display:flex;justify-content:space-between;gap:12px;background:#f8fafc;padding:8px;border-radius:6px;font-size:13px;overflow-wrap:anywhere}
+.reset-counts strong{font-variant-numeric:tabular-nums;color:#9f1239;flex-shrink:0}
+.data-reset-panel form>label{display:flex;flex-direction:column;gap:7px;margin-block:12px;font-size:13px;font-weight:600}
+.data-reset-panel input:not([type=checkbox]){width:100%;min-width:0;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;background:white;color:#0f172a;font:inherit}
+.data-reset-panel .reset-acknowledgement{flex-direction:row;align-items:flex-start;gap:10px;font-weight:400;line-height:1.5}
+.reset-acknowledgement input{flex-shrink:0;margin-top:3px;width:18px;height:18px}
+.reset-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin-top:16px}
+.reset-delete-button{background:#be123c;color:white;border:0;border-radius:9px;padding:11px 15px;font-weight:700;cursor:pointer;min-height:44px}
+.reset-delete-button:disabled{opacity:.45;cursor:not-allowed}.reset-delete-button:focus-visible{outline:3px solid #fda4af;outline-offset:3px}
+@media(max-width:700px){.reset-scope{grid-template-columns:1fr}.reset-counts{grid-template-columns:repeat(2,minmax(0,1fr))}.reset-actions>button{flex:1 1 130px}.reset-actions .reset-delete-button{flex-basis:100%}.data-reset-panel .form-grid{grid-template-columns:1fr}}
+@media(max-width:400px){.reset-counts{grid-template-columns:1fr}.reset-review-heading h3{font-size:16px}}

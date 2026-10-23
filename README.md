@@ -6,6 +6,8 @@ Start with **[INSTALL-GITHUB.md](INSTALL-GITHUB.md)** for the complete setup.
 
 For the new gateway and mandatory order approval, see **[WHATSAPP-ORDER-APPROVAL.md](WHATSAPP-ORDER-APPROVAL.md)**, including the existing VPS update commands.
 
+Admin can clear all business data from **Management settings → Reset application data**. See **[DATA-RESET.md](DATA-RESET.md)** for the deletion scope, retained Admin access and confirmation steps. Installing an update never runs the reset automatically.
+
 - Existing primary app: keep port **8001**.
 - MR app: **127.0.0.1:3010**, reached through its HTTPS subdomain via Nginx.
 - Source: your private GitHub repository, branch `main`.

@@ -839,5 +839,56 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
   console.log('PASS: real replica-set concurrent approximate deductions both commit without lost updates or a stock-shortage gate.');
  }
 
+
+ // Admin-only full reset is tested last, against synthetic data in this isolated database.
+ const resetAPI=load(path.join(root,'app/api/admin-reset/route.ts')),resetLib=load(path.join(root,'lib/mongo/data-reset.ts')),nativeLayer=load(path.join(root,'lib/mongo/database.ts')),passwordTools=load(path.join(root,'lib/passwords.ts'));
+ const resetPassword='Synthetic reset password only',resetHash=await passwordTools.passwordHash(resetPassword);
+ sql.prepare('UPDATE credentials SET password_hash=? WHERE email=?').run(resetHash,owner.email);
+ const adminUsername=sql.prepare('SELECT username FROM credentials WHERE email=?').get(owner.email).username;
+ identity=null;await ok(await resetAPI.POST(request({action:'preview'})),401);
+ identity=alice;await ok(await resetAPI.POST(request({action:'preview'})),403);await ok(await resetAPI.POST(request({action:'reset'})),403);
+ identity=owner;await ok(await resetAPI.POST(request({action:'preview'},'POST','https://untrusted.test')),403);
+ const resetBody=preview=>({action:'reset',token:preview.token,confirmation:'DELETE ALL DATA',understood:true,password:resetPassword,reason:'Remove synthetic test records'});
+ let resetPreview=await ok(await resetAPI.POST(request({action:'preview'})));
+ assert(resetPreview.total>0);assert(resetPreview.items.some(i=>i.label==='Orders and primary invoices'));assert(!JSON.stringify(resetPreview).includes('password_hash'));assert(!JSON.stringify(resetPreview).includes('whatsappKey'));
+ const countBeforeReset=sql.prepare('SELECT COUNT(*) AS n FROM invoices').get().n;
+ await ok(await resetAPI.POST(request({...resetBody(resetPreview),confirmation:'delete all data'})),400);await ok(await resetAPI.POST(request({...resetBody(resetPreview),understood:false})),400);await ok(await resetAPI.POST(request({...resetBody(resetPreview),password:''})),400);await ok(await resetAPI.POST(request({...resetBody(resetPreview),database:'unrelated'})),400);
+ assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM invoices').get().n,countBeforeReset);
+ for(let attempt=0;attempt<5;attempt++){resetPreview=await ok(await resetAPI.POST(request({action:'preview'})));await ok(await resetAPI.POST(request({...resetBody(resetPreview),password:'wrong-password'})),400);}
+ resetPreview=await ok(await resetAPI.POST(request({action:'preview'})));await ok(await resetAPI.POST(request(resetBody(resetPreview))),429);assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM invoices').get().n,countBeforeReset);
+ sql.prepare('DELETE FROM login_limits WHERE key=?').run('data-reset:'+owner.email);
+ resetPreview=await ok(await resetAPI.POST(request({action:'preview'})));await nativeLayer.mongoDatabase.prepare('INSERT INTO notifications(id,recipient,title,body,module,record_id,created) VALUES (?,?,?,?,?,?,?)').bind('reset-stale',owner.email,'New entry','','Orders',null,new Date().toISOString()).run();await pullResults();await ok(await resetAPI.POST(request(resetBody(resetPreview))),409);
+ resetPreview=await ok(await resetAPI.POST(request({action:'preview'})));const resetClock=clockOffset;clockOffset+=600001;await ok(await resetAPI.POST(request(resetBody(resetPreview))),409);clockOffset=resetClock;
+ sql.prepare("INSERT INTO email_outbox(id,mr_email,recipient,subject,message,status,error,created) VALUES (?,?,?,?,?,'sending','',?)").run('reset-sending',owner.email,'nobody@example.test','Test','No actual send',new Date().toISOString());await ok(await resetAPI.POST(request({action:'preview'})),409);sql.prepare('DELETE FROM email_outbox WHERE id=?').run('reset-sending');
+ sql.prepare("INSERT INTO period_locks(month,closed,closure_id,updated,admin_email,reason) VALUES ('2019-01',1,'reset-closed',?,?,?)").run(new Date().toISOString(),owner.email,'Synthetic closed month');
+ sql.prepare('INSERT INTO period_reports(id,closure_id,month,mr_email,report,created) VALUES (?,?,?,?,?,?)').run('reset-closed-report','reset-closed','2019-01',alice.email,'{"saved":true}',new Date().toISOString());
+ sql.prepare('INSERT OR REPLACE INTO employee_photos(email,image_base64,updated) VALUES (?,?,?)').run(owner.email,'synthetic-admin-avatar',new Date().toISOString());
+ const preservedSettings=sql.prepare('SELECT * FROM communication_settings ORDER BY id').all(),preservedAdmin=sql.prepare('SELECT * FROM credentials WHERE email=?').get(owner.email),preservedLegacy=sql.prepare("SELECT * FROM records WHERE id='whatsapp-settings'").get();
+ identity=owner;await sessionHeaders();const oldAdminCookie=(await sessionHeaders()).get('cookie');browserCookie=oldAdminCookie;
+ resetPreview=await ok(await resetAPI.POST(request({action:'preview'})));assert(resetPreview.items.some(i=>i.label==='Closed monthly reports'&&i.count>0));
+ const resetActor=sql.prepare('SELECT * FROM members WHERE email=?').get(owner.email),resetSession=passwordTools.readToken(oldAdminCookie),resetTokenHash=await passwordTools.digest(resetPreview.token);
+ const beforeResetRecords=sql.prepare('SELECT COUNT(*) AS n FROM records').get().n;
+ // Inject a failure after several deletes: the entire reset, including accounts/sessions, must roll back.
+ await assert.rejects(nativeLayer.transaction(c=>resetLib.resetApplicationData({...c,db:{collection(name){const collection=c.db.collection(name);return name==='stock_balances'?new Proxy(collection,{get(target,key){if(key==='deleteMany')return async()=>{throw Error('Injected reset failure')};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}):collection;}}},resetActor,resetSession,resetTokenHash,resetHash,'Rollback test')),/Injected reset failure/);
+ await pullResults();assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM records').get().n,beforeResetRecords);assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM invoices').get().n,countBeforeReset);assert(sql.prepare('SELECT * FROM sessions WHERE token_hash=?').get(await passwordTools.digest(resetSession)));assert(sql.prepare('SELECT * FROM members WHERE email=?').get(alice.email));
+ const unrelated=process.env.MONGO_TEST_MODE==='model'?require('./mongo-model.cjs')().db:testClient.db(process.env.MONGODB_DB+'_unrelated');await unrelated.collection('records').insertOne({id:'other-application',data:'Must remain intact'});
+ try{
+  const resetResponse=await resetAPI.POST(request(resetBody(resetPreview))),resetResult=await ok(resetResponse);assert(resetResponse.headers.get('set-cookie').includes('Max-Age=0'));assert(resetResult.total>0);
+  assert.equal(sql.prepare("SELECT COUNT(*) AS n FROM members WHERE role<>'admin'").get().n,0);assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM credentials').get().n,sql.prepare("SELECT COUNT(*) AS n FROM members WHERE role='admin'").get().n);assert.deepEqual(sql.prepare('SELECT * FROM credentials WHERE email=?').get(owner.email),preservedAdmin);
+  assert.deepEqual(sql.prepare('SELECT * FROM communication_settings ORDER BY id').all(),preservedSettings);assert.deepEqual(sql.prepare("SELECT * FROM records WHERE id='whatsapp-settings'").get(),preservedLegacy);assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM records WHERE id<>?').get('whatsapp-settings').n,0);
+  for(const table of Object.keys((await import('../scripts/mongo-common.mjs')).schema).filter(t=>!['records','members','credentials','employee_photos','communication_settings','login_limits','admin_audit'].includes(t)))assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM '+table).get().n,0,table+' was not cleared');
+  assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM employee_photos WHERE email<>?').get(owner.email).n,0);assert(sql.prepare('SELECT * FROM employee_photos WHERE email=?').get(owner.email));const resetReceipt=sql.prepare('SELECT * FROM admin_audit').all();assert.equal(resetReceipt.length,1);assert.equal(resetReceipt[0].action,'Application data reset');assert(!JSON.stringify(resetReceipt).includes(resetPassword));
+  assert.equal((await unrelated.collection('records').findOne({id:'other-application'})).data,'Must remain intact');assert.equal((await mongo.collection('_control').findOne({_id:'ledger'})).order_inventory_policy,'approved-approximate-v1');
+  await ok(await session.GET(),401);await ok(await resetAPI.POST(request(resetBody(resetPreview))),401);
+  // An old authenticated request must not recreate data after the session purge.
+  await assert.rejects(nativeLayer.mongoDatabase.prepare('INSERT INTO records(id,owner,kind,data,created,assigned_to) VALUES (?,?,?,?,?,?)').bind('stale-after-reset',owner.id,'Customers','{}',new Date().toISOString(),'').run(),/session has ended/);assert(!await mongo.collection('records').findOne({id:'stale-after-reset'}));
+  const loginAPI=load(path.join(root,'app/api/auth/login/route.ts'));const resetLogin=await loginAPI.POST(request({username:adminUsername,password:resetPassword}));await ok(resetLogin);browserCookie=resetLogin.headers.get('set-cookie').split(';')[0];assert.equal((await ok(await session.GET())).member.role,'admin');await ok(await resetAPI.POST(request(resetBody(resetPreview))),409);
+  if(process.env.MONGO_TEST_MODE!=='model'){
+   const concurrentPreview=await ok(await resetAPI.POST(request({action:'preview'}))),token=passwordTools.readToken(browserCookie),hash=await passwordTools.digest(concurrentPreview.token);
+   const race=await Promise.allSettled([1,2].map(()=>nativeLayer.transaction(c=>resetLib.resetApplicationData(c,resetActor,token,hash,resetHash,'Concurrent reset test'))));assert.equal(race.filter(r=>r.status==='fulfilled').length,1);assert.equal(await mongo.collection('admin_audit').countDocuments({action:'Application data reset'}),1);await pullResults();
+  }
+  console.log('PASS: Admin reset preview, role/origin/password/phrase/acknowledgement gates, rate limit, stale/expired review, sending-message protection, atomic rollback, all business data including closed reports, Admin/config preservation, unrelated database isolation, session revocation and stale-write rejection. No live data or messages touched.');
+ }finally{if(process.env.MONGO_TEST_MODE!=='model')await unrelated.dropDatabase();browserCookie=null;}
+
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(stopMongo);
 
