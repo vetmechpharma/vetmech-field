@@ -105,6 +105,14 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  const clinic=await post('Customers',{Name:'Linked clinic','Customer category':'Medical / Clinic',Route:'Uthukuli','Stockist IDs':JSON.stringify([s1.id])},{assignedTo:alice.email});
  const product=await post('Products',{Name:'Product A',MRP:'200',PTR:'120',PTS:'90','GST %':'5','Sample cost':'2','Scheme 1 enabled':'Yes','Scheme 1 paid':'10','Scheme 1 free':'2','Scheme 2 enabled':'Yes','Scheme 2 paid':'5','Scheme 2 free':'1','Scheme 3 enabled':'Yes','Scheme 3 paid':'20','Scheme 3 free':'5'});
  const otherProduct=await post('Products',{Name:'Product B',MRP:'100',PTR:'75',PTS:'50','GST %':'0','Retail offer enabled':'Yes','Retail offer rate':'70'});
+ const categoryData=JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(product.id).data);
+ await post('Products',{...categoryData,'Product category':'  Mineral   Supplements  '},{id:product.id});
+ const categorySaved=JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(product.id).data);assert.equal(categorySaved['Product category'],'Mineral Supplements');assert.equal(categorySaved.PTR,categoryData.PTR);assert.equal(categorySaved['Scheme 1 paid'],categoryData['Scheme 1 paid']);
+ await ok(await records.POST(request({kind:'Products',id:product.id,data:{...categorySaved,'Product category':'x'.repeat(101)}})),400);
+ identity=alice;assert.equal((await ok(await records.GET())).records.find(r=>r.id===product.id).data['Product category'],'Mineral Supplements');
+ await ok(await records.POST(request({kind:'Products',id:product.id,data:{...categorySaved,'Product category':'MR cannot change'}})),403);
+ identity=owner;assert.equal(JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(product.id).data)['Product category'],'Mineral Supplements');
+ console.log('PASS: product categories persist through the API, remain visible to MR, reject oversized names and MR writes, and preserve prices and schemes.');
  const gift=await post('Gifts',{Name:'Diary','Unit cost':'100','One per customer':'Yes'});
  identity=bob;const ownBob=await post('Customers',{Name:'Bob doctor',Route:'South Tirupur'});
  identity=alice;const own=await post('Customers',{Name:'Alice doctor',Route:'Uthukuli'});

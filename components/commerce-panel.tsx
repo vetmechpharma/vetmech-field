@@ -1,4 +1,5 @@
 'use client';
+import {sortProducts} from '../lib/product-catalogue';
 import {ApprovalPreview} from './approval-preview';
 import {requestedOrderLine,hasCustomScheme} from '../lib/custom-schemes';
 import {schemeLabel,formatPrice as money} from '../lib/product-pricing';
@@ -17,7 +18,7 @@ type Props={tab:string;rows:FieldRecord[];admin:boolean;refresh:()=>Promise<void
 export function CommercePanel({tab,rows,admin,refresh,initialDraft,initialCustomer='',initialVisit='',onSaved}:Props){
  const [viewRevision,setViewRevision]=useState(0),[showCancelled,setShowCancelled]=useState(false);
  const [data,setData]=useState<any>({stock:[],invoices:[],commitments:[]}),[error,setError]=useState(''),[loading,setLoading]=useState(true),[show,setShow]=useState(false),[busy,setBusy]=useState(false),[stockFilter,setStockFilter]=useState('');
- const primary=tab==='Primary sales',products=rows.filter(r=>r.kind==='Products'),customers=rows.filter(r=>r.kind==='Customers'),stocks=[{id:COMPANY_STOCK_ID,kind:'Stockists',created:'',assigned_to:'',owner:'',data:{Name:COMPANY_NAME}} as FieldRecord,...rows.filter(r=>r.kind==='Stockists')];
+ const primary=tab==='Primary sales',products=sortProducts(rows.filter(r=>r.kind==='Products')),customers=rows.filter(r=>r.kind==='Customers'),stocks=[{id:COMPANY_STOCK_ID,kind:'Stockists',created:'',assigned_to:'',owner:'',data:{Name:COMPANY_NAME}} as FieldRecord,...rows.filter(r=>r.kind==='Stockists')];
  const [editing,setEditing]=useState<any>(null),[editRequest,setEditRequest]=useState(''),[reprice,setReprice]=useState(false),[message,setMessage]=useState('');
  const [id,setId]=useState(''),[customerId,setCustomer]=useState(initialCustomer),[stockistId,setStockist]=useState(''),[date,setDate]=useState(today()),[number,setNumber]=useState(''),[notes,setNotes]=useState(''),[visitId,setVisit]=useState(initialVisit);
  const [invoiceValue,setInvoiceValue]=useState(''),[editReason,setEditReason]=useState('');

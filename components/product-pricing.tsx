@@ -66,6 +66,7 @@ export function SchemePricing({value, slot, admin}: {value: ProductData; slot: n
 }
 
 export function ProductPriceCell({data, field, admin}: {data: ProductData; field: string; admin: boolean}) {
+  if (field === 'Product category') return <span className="product-category-badge">{data[field]?.trim() || 'Uncategorised'}</span>;
   if (field === 'Scheme') {
     const slots = schemeSlots.filter(i => data[`Scheme ${i} enabled`] === 'Yes');
     return slots.length ? <details className="catalogue-scheme-rates"><summary>{slots.map(i => schemeLabel(data, i)).join(' / ')}<small>View net rates{admin ? ' & profit' : ''}</small></summary>{slots.map(slot => <SchemePricing key={slot} value={data} slot={slot} admin={admin}/>)}</details> : <>No scheme</>;

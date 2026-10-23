@@ -14,11 +14,11 @@ export function dateLabel(s:string){return new Date(s).toLocaleDateString('en-IN
 
 Object.assign(columns,{Districts:['Name','State'],Headquarters:['Name','District'],Routes:['Name','District','Headquarters'],'MR types':['Name','Description']});
 export const adminLabels:Record<string,string>={Dashboard:'Management overview',Team:'MR management',Customers:'Doctors & customers',Products:'Products & pricing',Samples:'Sample allotment',Expenses:'Expense approvals',Orders:'Order management',Settings:'Management settings'};
-fields.Products=['Name','Pack'];
+fields.Products=['Name','Pack','Product category'];
 fields.Gifts=['Name','Unit cost','One per customer','Notes'];options['One per customer']=['Yes','No'];options['Retail offer enabled']=['No','Yes'];
 for(const i of [1,2,3]){options[`Scheme ${i} enabled`]=['No','Yes'];numeric.push(`Scheme ${i} paid`,`Scheme ${i} free`)}numeric.push('Retail offer rate','Sample cost');
 options.Action=['Check in','Check out'];
-columns.Products=['Name','Pack','MRP','GST %','PTR','PTS','Landing cost','Scheme'];columns.Visits=['Customer','Date','Purpose','Status'];columns.Gifts=['Name','Unit cost','One per customer'];
+columns.Products=['Name','Pack','Product category','MRP','GST %','PTR','PTS','Landing cost','Scheme'];columns.Visits=['Customer','Date','Purpose','Status'];columns.Gifts=['Name','Unit cost','One per customer'];
 singular.Gifts='gift material';descriptions.Gifts='Allot gifts, monitor costs and control repeat supply.';descriptions['Stock balance']='Stockist-wise product quantities and primary invoice values.';descriptions.WhatsApp='Message delivery and communication settings.';
 
 columns.Customers=['Name','Type','Route','Address','Email','Phone','Registration no','Date of birth','Location'];

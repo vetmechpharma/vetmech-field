@@ -1,7 +1,8 @@
+import {normalizeProductCategory,sortProducts} from './product-catalogue';
 import {normalizeProductPricing,schemeLabel,schemeSlots,productScheme,withGST} from './product-pricing';
 export type ProductRow={id:string;kind:string;data:Record<string,string>};
 export const legacyProductHeaders=['Product Name','Packing','MRP','PTR','PTS','Offer Schemes'];
-export const productHeaders=['Product Name','Packing','MRP','GST %','Retail margin %','Stockist margin %','Landing cost','PTR','PTS','PTR incl GST','PTS incl GST','Offer Schemes'];
+export const productHeaders=['Product Name','Packing','Product category','MRP','GST %','Retail margin %','Stockist margin %','Landing cost','PTR','PTS','PTR incl GST','PTS incl GST','Offer Schemes'];
 export function readCSV(input:string):string[][]{
  const text=input.replace(/^\uFEFF/,'');const rows:string[][]=[];let row:string[]=[],cell='',quoted=false,closed=false;
  for(let i=0;i<text.length;i++){const c=text[i];if(quoted){if(c==='"'){if(text[i+1]==='"'){cell+='"';i++}else{quoted=false;closed=true}}else cell+=c;continue}
@@ -15,7 +16,7 @@ export function writeCSV(rows:string[][]){return '\uFEFF'+rows.map(r=>r.map(safe
 export function offerText(data:Record<string,string>){return schemeSlots.filter(i=>data[`Scheme ${i} enabled`]==='Yes').map(i=>schemeLabel(data,i).replace(' discount','').replaceAll(' ','')).join('; ')}
 export function productCSV(rows:ProductRow[],admin:boolean){
  const headers=productHeaders.filter(h=>admin||!['PTS','PTS incl GST','Landing cost','Retail margin %','Stockist margin %'].includes(h));
- return writeCSV([headers,...rows.filter(r=>r.kind==='Products').map(r=>headers.map(h=>{
+ return writeCSV([headers,...sortProducts(rows.filter(r=>r.kind==='Products')).map(r=>headers.map(h=>{
   const d=r.data,gst=Number(d['GST %']||0);
   if(h==='Product Name')return d.Name||'';if(h==='Packing')return d.Pack||'';if(h==='Offer Schemes')return offerText(d);
   if(h==='PTR incl GST'||h==='PTS incl GST')return withGST(Number(d[h.startsWith('PTR')?'PTR':'PTS']||0),gst).toFixed(2);
@@ -27,7 +28,7 @@ export function previewProducts(text:string,existing:ProductRow[]):ProductImport
  const csv=readCSV(text);if(csv.length<2)throw Error('The CSV must contain a header and at least one product.');if(csv.length>501)throw Error('Import a maximum of 500 products at a time.');
  const header=csv[0].map(s=>s.trim());if(new Set(header).size!==header.length||header.some(h=>!productHeaders.includes(h))||legacyProductHeaders.some(h=>!header.includes(h)))throw Error('Use the template columns: '+productHeaders.join(', '));
  const seen=new Set<string>();return csv.slice(1).map((cells,index)=>{const get=(h:string)=>{const v=(cells[header.indexOf(h)]||'').trim();return /^'[\s]*[=+\-@]/.test(v)?v.slice(1):v},name=get('Product Name'),key=name.toLowerCase(),matches=existing.filter(r=>r.kind==='Products'&&r.data.Name?.trim().toLowerCase()===key),old=matches[0];let error='';const data:Record<string,string>={...old?.data,Name:name,Pack:get('Packing'),MRP:get('MRP'),PTR:get('PTR'),PTS:get('PTS')};
- try{if(cells.length!==header.length)throw Error('Row column count does not match the header.');for(const k of ['GST %','Retail margin %','Stockist margin %','Landing cost'])if(header.includes(k))data[k]=get(k);Object.assign(data,normalizeProductPricing(data));if(!name||name.length>200)throw Error('Enter a product name of up to 200 characters.');if(seen.has(key))throw Error('Duplicate product name in this file.');if(matches.length>1)throw Error('Multiple catalogue matches; correct duplicate names first.');if(!data.Pack||data.Pack.length>100)throw Error('Enter packing (up to 100 characters).');for(const k of ['MRP','PTR','PTS'])if(!/^\d+(\.\d{1,2})?$/.test(data[k])||Number(data[k])>10000000)throw Error(k+' must be a nonnegative amount with up to 2 decimals.');
+ try{if(cells.length!==header.length)throw Error('Row column count does not match the header.');for(const k of ['Product category','GST %','Retail margin %','Stockist margin %','Landing cost'])if(header.includes(k))data[k]=get(k);Object.assign(data,normalizeProductPricing(normalizeProductCategory(data)));if(!name||name.length>200)throw Error('Enter a product name of up to 200 characters.');if(seen.has(key))throw Error('Duplicate product name in this file.');if(matches.length>1)throw Error('Multiple catalogue matches; correct duplicate names first.');if(!data.Pack||data.Pack.length>100)throw Error('Enter packing (up to 100 characters).');for(const k of ['MRP','PTR','PTS'])if(!/^\d+(\.\d{1,2})?$/.test(data[k])||Number(data[k])>10000000)throw Error(k+' must be a nonnegative amount with up to 2 decimals.');
  const schemes=get('Offer Schemes').split(';').map(s=>s.trim()).filter(Boolean);if(schemes.length>20)throw Error('Maximum 20 schemes.');const unique=new Set<string>();for(let i=1;i<=20;i++){data[`Scheme ${i} enabled`]='No';delete data[`Scheme ${i} paid`];delete data[`Scheme ${i} free`];delete data[`Scheme ${i} type`];delete data[`Scheme ${i} discount %`]}
  schemes.forEach((s,n)=>{const m=s.match(/^(\d+)\s*\+\s*(\d+)$/),discount=s.match(/^(\d+(?:\.\d{1,2})?)\s*%$/);if(!m&&!discount)throw Error('Use buy+free or percentage schemes, e.g. 5+1; 10+3; 5%.');
  if(m&&(Number(m[1])<1||Number(m[2])<1||Number(m[1])>100000||Number(m[2])>100000))throw Error('Use positive buy+free quantities up to 100000.');

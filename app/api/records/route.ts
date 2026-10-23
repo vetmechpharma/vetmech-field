@@ -1,4 +1,5 @@
 import {secondarySale} from '../../../lib/order-workflow';
+import {normalizeProductCategory} from '../../../lib/product-catalogue';
 import {normalizeProductPricing,productForMR,productScheme,schemeSlots} from '../../../lib/product-pricing';
 import {approvedTourGuards,gateFrom} from '../../../lib/monthly-tour-server';
 import {expandProgrammes,programmeKind,calendarKind,holidayWorkKind} from '../../../lib/monthly-tour';
@@ -114,7 +115,7 @@ export async function POST(req:Request){try{
 
  if(b.kind==='Gifts'){b.data['One per customer']=b.data['One per customer']||'Yes';if(!['Yes','No'].includes(b.data['One per customer']))throw new HttpError(400,'Choose Yes or No for the gift repeat rule.');if(Number(b.data['Unit cost'])<0||!Number.isFinite(Number(b.data['Unit cost'])))throw new HttpError(400,'Enter a valid gift cost.');}
  if(b.kind==='Products'){
-  try{b.data=normalizeProductPricing(b.data);for(const i of schemeSlots)if(b.data[`Scheme ${i} enabled`]==='Yes')productScheme(b.data,i);}catch(e){throw new HttpError(400,(e as Error).message)}
+  try{b.data=normalizeProductPricing(normalizeProductCategory(b.data));for(const i of schemeSlots)if(b.data[`Scheme ${i} enabled`]==='Yes')productScheme(b.data,i);}catch(e){throw new HttpError(400,(e as Error).message)}
   if(b.data['Retail offer enabled']==='Yes'&&!(Number(b.data['Retail offer rate'])>0))throw new HttpError(400,'Enter a positive retail offer rate.');
   if(b.data['Price mode']&&!['PTR','PTS','Offer rate','Special rate'].includes(b.data['Price mode']))throw new HttpError(400,'Choose PTR, PTS, offer rate or special rate.');
   if(b.data['Scheme enabled']==='Yes'&&(!Number.isInteger(Number(b.data['Scheme paid quantity']))||Number(b.data['Scheme paid quantity'])<1||!Number.isInteger(Number(b.data['Scheme free quantity']))||Number(b.data['Scheme free quantity'])<1))throw new HttpError(400,'An enabled scheme needs positive whole paid and free quantities.');

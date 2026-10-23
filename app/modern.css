@@ -193,3 +193,10 @@ button.primary,button.secondary,.icon-button,.customer-call{min-height:44px}
  .mr-activity-status{grid-area:status;text-align:right}.mr-activity-arrow{grid-area:arrow}
 }
 @media print{.mr-activity-filters,.mr-activity-summary small,.mr-activity-arrow{display:none!important}.mr-activity-panel{border:1px solid #dce5ef;box-shadow:none}.mr-activity-list>li{break-inside:avoid}.mr-activity-entry{color:#183332}}
+
+/* Product catalogue filters share the same compact layout on both workspaces. */
+.product-catalogue-panel .records-toolbar{align-items:center;flex-wrap:wrap}
+.product-catalogue-panel .filter-controls{display:flex;gap:8px;flex-wrap:wrap;min-width:0}
+.product-catalogue-panel .filter-controls select{min-width:0;max-width:100%;flex:1 1 150px}
+.product-category-badge{display:inline-block;padding:3px 8px;border-radius:7px;background:#eaf2ff;color:#244b80;font-size:12px;font-weight:600;white-space:normal;overflow-wrap:anywhere;max-width:100%}
+@media(max-width:640px){.product-catalogue-panel .search-field,.product-catalogue-panel .filter-controls{width:100%}.product-catalogue-panel .filter-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.product-catalogue-panel .filter-controls select{width:100%}}
