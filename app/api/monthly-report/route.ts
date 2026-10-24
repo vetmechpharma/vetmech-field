@@ -21,12 +21,10 @@ export async function POST(req:Request){try{
  if(!b||!validMonth(b.month))throw new HttpError(400,'Choose a valid month.');
  let targets:{email:string;target:number}[];
  if(Array.isArray(b.targets)){
-  if(!b.targets.length||b.targets.length>200||!Number.isFinite(b.total)||b.total<1||b.total>100000000)throw new HttpError(400,'Enter a monthly total and MR allocations.');
+  if(!b.targets.length||b.targets.length>200)throw new HttpError(400,'Choose between 1 and 200 MR targets.');
   targets=b.targets;
-  const reps=(await db().prepare("SELECT email FROM members WHERE role='mr' AND status='active'").all<{email:string}>()).results;
-  if(new Set(targets.map(t=>t?.email)).size!==targets.length||targets.length!==reps.length||reps.some(m=>!targets.some(t=>t?.email===m.email)))throw new HttpError(400,'Include each active MR exactly once. Refresh the list.');
-  if(targets.some(t=>!t||typeof t.email!=='string'||!Number.isFinite(t.target)||t.target<1||t.target>100000000))throw new HttpError(400,'Enter a positive target for each MR.');
-  if(targets.reduce((n,t)=>n+Math.round(t.target*100),0)!==Math.round(b.total*100))throw new HttpError(400,'MR allocations must equal the total monthly target.');
+  if(new Set(targets.map(t=>t?.email)).size!==targets.length)throw new HttpError(400,'Include each MR only once.');
+  if(targets.some(t=>!t||typeof t.email!=='string'||!Number.isFinite(t.target)||t.target<1||t.target>100000000))throw new HttpError(400,'Enter a positive target for each selected MR.');
  }else{
   if(typeof b.email!=='string'||!Number.isFinite(b.target)||b.target<1||b.target>100000000)throw new HttpError(400,'Enter a representative and positive target.');
   targets=[{email:b.email,target:b.target}];
