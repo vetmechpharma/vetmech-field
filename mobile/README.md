@@ -19,6 +19,12 @@ Separate React Native / Expo Android app for the live VETMECH Field server at ht
 
 This is an actual React Native app, not a WebView. The backend alone controls authorization, price calculation, stock, GPS validation, and month locks. No database connection strings, credentials, or session secrets are shipped in the APK.
 
+## Advanced native workflows (development)
+- Order edits: PATCH /api/commerce with revision and requestId, server-enforced rate preservation and Admin approval after acceptance. Cancellation requires a reason; only permitted statuses and open periods are accepted.
+- Route tour planning: GET/POST /api/tour-planning for whole-route plans, rescheduling, cancellations, retained history; /api/route-performance for coverage and inactive customer tables.
+- Monthly report: GET /api/monthly-report; native expandable tables and offline-generated PDF from fetched report using expo-print + expo-sharing. PDFs reflect data at download time; no offline write support.
+- Navigation: More → Order edits / Tour planning / Reports.
+
 ## Validation / release gates
 - TEST with an MR test account in a non-production database first.
 - Confirm native Android cookie persistence through login + /api/session on a real phone.
@@ -26,4 +32,5 @@ This is an actual React Native app, not a WebView. The backend alone controls au
 - Confirm the deployed server matches the repository and its data/API schemas.
 - Confirm stockist-linked clinic orders, pricing, stock and idempotent retries.
 - Inspect GitHub Actions Android build; no production APK/release claimed yet.
-- Complete remaining advanced modules (route planning, samples/gift allotment workflows, order-edit approval UX, print/PDF and offline sync) before claiming full feature parity.
+- Test all advanced workflows with a non-production MR account; verify server error responses, accepted-order approvals, locked months, route plans, sample/gift ledgers, and PDF output.
+- Native app still lacks comprehensive customer category-specific forms, multi-line new-order composition, offline sync, and production signing; do not claim complete parity yet.
