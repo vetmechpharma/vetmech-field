@@ -24,3 +24,5 @@ singular.Gifts='gift material';descriptions.Gifts='Allot gifts, monitor costs an
 columns.Customers=['Name','Type','Route','Address','Email','Phone','Registration no','Date of birth','Location'];
 
 descriptions['Territory setup']='Manage districts, headquarters and routes together.';
+
+descriptions.Locations='Daily GPS captures, recorded locations and estimated travel.';

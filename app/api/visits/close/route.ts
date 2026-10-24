@@ -23,6 +23,7 @@ export async function POST(req:Request){try{
   statements.push(...await issueStatements(m,kind,i.itemId,i.qty,c.id,b.id,gps,`${b.id}:${kind}:${i.itemId}`));
   if(kind==='sample'&&i.commitmentId){const p=await db().prepare('SELECT * FROM commitments WHERE id=? AND customer_id=? AND mr_email=? AND product_id=?').bind(i.commitmentId,c.id,m.email,i.itemId).first<{quantity:number;fulfilled:number}>();if(!p||p.quantity-p.fulfilled<i.qty)throw new HttpError(400,'This quantity exceeds the remaining sample commitment.');statements.push(db().prepare('UPDATE commitments SET fulfilled=fulfilled+? WHERE id=?').bind(i.qty,i.commitmentId));statements.push(guard('commitment','COALESCE((SELECT fulfilled>=0 AND fulfilled<=quantity FROM commitments WHERE id=?),0)',[i.commitmentId]));}
  }}
+ statements.push(db().prepare(`UPDATE records SET data=json_set(data,'$."Opening location name"',?,'$."Opening location address"',?) WHERE id=?`).bind(visit.details['Location name']||'',visit.details['Location address']||'',b.id));
  statements.push(...customerLocationStatements(c,gps,{name:b.locationName,address:b.locationAddress},b.id,m));
  const orders=(await db().prepare("SELECT number,items FROM invoices WHERE visit_id=? AND kind='secondary' AND status<>'Cancelled'").bind(b.id).all<{number:string;items:string}>()).results;
  let phone=(c.details['Mobile 1']||c.details.Phone||'').replace(/\D/g,'');if(phone.length===10)phone='91'+phone;if(phone.length<10||phone.length>15)phone='';

@@ -848,6 +848,8 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  }
 
 
+ await require('./daily-map-integration.cjs')({load,root,sql,ok,request,owner,alice,bob,who:u=>{identity=u}});
+
  // Admin-only full reset is tested last, against synthetic data in this isolated database.
  const resetAPI=load(path.join(root,'app/api/admin-reset/route.ts')),resetLib=load(path.join(root,'lib/mongo/data-reset.ts')),nativeLayer=load(path.join(root,'lib/mongo/database.ts')),passwordTools=load(path.join(root,'lib/passwords.ts'));
  const resetPassword='Synthetic reset password only',resetHash=await passwordTools.passwordHash(resetPassword);
