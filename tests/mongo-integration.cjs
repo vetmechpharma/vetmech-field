@@ -52,7 +52,8 @@ async function stopMongo(){try{const c=await load(path.join(root,'lib/mongo/clie
 const records=load(path.join(root,'app/api/records/route.ts')),team=load(path.join(root,'app/api/team/route.ts')),session=load(path.join(root,'app/api/session/route.ts')),inbox=load(path.join(root,'app/api/notifications/route.ts'));
 const testMR=load(path.join(root,'app/api/test-mr/route.ts'));
 const owner={id:'owner-user',email:'vetmechpharma@gmail.com'},alice={id:'alice-user',email:'alice@example.test'},bob={id:'bob-user',email:'bob@example.test'};
-const request=(data,method='POST',origin='https://app.test')=>new Request('https://app.test/api/test',{method,headers:{'Content-Type':'application/json',origin},body:JSON.stringify(data)});
+// Normal visit fixtures emulate clients that capture fresh GPS; negative cases supply an explicit empty/invalid value.
+const request=(data,method='POST',origin='https://app.test')=>{if(data?.kind==='Visits'&&data.data&&!Object.hasOwn(data.data,'GPS data'))data={...data,data:{...data.data,'GPS data':JSON.stringify({lat:11.18,lng:77.47,accuracy:12,capturedAt:new Date().toISOString()})}};return new Request('https://app.test/api/test',{method,headers:{'Content-Type':'application/json',origin},body:JSON.stringify(data)});};
 async function ok(response,expected=200){assert.equal(response.status,expected,await response.clone().text());return response.json()}
 (async()=>{
  await startMongo();
@@ -139,7 +140,13 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  await ok(await records.POST(request({kind:'Attendance',data:attend('Check in')})),409);
  await ok(await records.POST(request({kind:'Attendance',id:checkin.id,data:attend('Check out')})),403);
  await require('./monthly-tour-integration.cjs')({load,root,sql,ok,request,records,fieldDate,owner,alice,bob,r1,r2,r3,shared,assigned,who:u=>{identity=u},setClock:iso=>{clockOffset=iso?NativeDate.parse(iso)-NativeDate.now():initialClockOffset}});
- const visit=await post('Visits',{Customer:'Shared doctor',Date:fieldDate,Purpose:'Order'});
+ await ok(await records.POST(request({kind:'Visits',data:{Customer:'Shared doctor',Date:fieldDate,'GPS data':''}})),400);
+ await ok(await records.POST(request({kind:'Visits',data:{Customer:'Shared doctor',Date:fieldDate,'GPS data':JSON.stringify({...gps(),capturedAt:new Date(Date.now()-600000).toISOString()})}})),400);
+ const visit=await post('Visits',{Customer:'Shared doctor',Date:fieldDate,Purpose:'Order','Closing GPS':JSON.stringify(gps())});
+ const openingGPS=JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(visit.id).data)['GPS data'];assert(!JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(visit.id).data)['Closing GPS']);
+ await post('Visits',{Customer:'Shared doctor',Date:fieldDate,Purpose:'Order',Notes:'Updated note','GPS data':JSON.stringify({...gps(),lat:12})},{id:visit.id});assert.equal(JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(visit.id).data)['GPS data'],openingGPS);
+ const dailyVisit=load(path.join(root,'lib/daily-map.ts')).dailyPoints(sql.prepare("SELECT * FROM records WHERE assigned_to=? AND kind IN ('Attendance','Visits')").all(alice.email),fieldDate);assert(dailyVisit.points.some(p=>p.recordId===visit.id&&p.kind==='Visit'));assert(dailyVisit.straightKm>0);
+
  const commerce=load(path.join(root,'app/api/commerce/route.ts')),benefits=load(path.join(root,'app/api/benefits/route.ts')),closeVisit=load(path.join(root,'app/api/visits/close/route.ts')),whatsapp=load(path.join(root,'app/api/whatsapp/route.ts'));
  const invoice=(kind,stockistId,lines,extra={})=>{const quotes=kind==='secondary'?[]:lines.map(l=>load(path.join(root,'lib/field-rules.ts')).priceLine(JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(l.productId).data),l.productId,l.qty,l.scheme||'none',true));return {id:crypto.randomUUID(),kind,stockistId,date:fieldDate,...(kind!=='secondary'?{invoiceValue:quotes.reduce((n,l)=>n+l.subtotal,0)/100}:{}),lines:lines.map((l,i)=>kind==='secondary'?l:{...l,freeQty:quotes[i].free,batch:'TEST-BATCH',expiry:'2035-12-31'}),...extra}};
  const qty=(stock,prod)=>sql.prepare('SELECT quantity FROM stock_balances WHERE stockist_id=? AND product_id=?').get(stock,prod)?.quantity||0;

@@ -173,8 +173,15 @@ export async function POST(req:Request){try{
   const query=existing?`UPDATE records SET data=?,assigned_to=? WHERE id=? AND ${condition} RETURNING id`:`INSERT INTO records (id,owner,kind,data,created,assigned_to) SELECT ?,?,?,?,?,? WHERE ${condition} RETURNING id`;
   const args=existing?[JSON.stringify(b.data),assignedTo,id,fieldDay,m.email,m.user_id]:[id,m.user_id,b.kind,JSON.stringify(b.data),now,assignedTo,fieldDay,m.email,m.user_id];
   if(b.kind==='Attendance')args.push(fieldDay,m.email,m.user_id,b.data.Action);if(b.kind==='Attendance'&&b.data.Action==='Check out')args.push(fieldDay,m.email,m.user_id);
+  const tourGuards=b.kind==='Visits'?await approvedTourGuards(m,fieldDay,b.data['Customer ID']):[];
+  if(b.kind==='Visits'){
+   for(const key of ['Closing GPS','Closed at','Closing notes','Opening location name','Opening location address']){delete b.data[key];if(old?.[key]!==undefined)b.data[key]=old[key];}
+   if(existing){for(const key of ['GPS data','Location','Location captured at','Location name','Location address','Location source']){delete b.data[key];if(old?.[key]!==undefined)b.data[key]=old[key];}}
+   else{const gps=legacyGPS(b.data);if(!validGPS(gps))throw new HttpError(400,'Fresh GPS is required to record a visit. Allow location access and try again.');b.data['GPS data']=JSON.stringify(gps);b.data.Location=gpsString(gps);b.data['Location captured at']=gps.capturedAt;}
+   args[existing?0:3]=JSON.stringify(b.data);
+  }
   const stmt=db().prepare(query).bind(...args);
-  const saved=b.kind==='Visits'?(await db().batch([...await approvedTourGuards(m,fieldDay,b.data['Customer ID']),stmt])).at(-1)?.results[0]:await stmt.first();
+  const saved=b.kind==='Visits'?(await db().batch([...tourGuards,stmt])).at(-1)?.results[0]:await stmt.first();
   if(!saved)throw new HttpError(409,b.kind==='Attendance'?'Only one check-in and one checkout are allowed per day. Close open visits before checkout.':'Start my day before recording a visit.');
   return json({ok:true,id});
  }

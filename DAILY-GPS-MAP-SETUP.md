@@ -31,3 +31,9 @@ Routes contain at most 25 intermediate stops per request. Longer days are split 
 Google addresses and routes are displayed temporarily and are not written into customer records or exported. Saved coordinates and existing locality names remain available if Google fails or is disabled. The publicly accessible `/maps-information` page explains map data use and links Google's terms and privacy policy.
 
 This feature does not enable continuous background GPS, upload photos, change attendance or overwrite a customer's postal address.
+
+## Visit capture correction (24 October 2026)
+
+New MR visits now request fresh GPS automatically when saved, on web and in the development native client. Denied GPS permission prevents saving; existing drafts remain available. The server validates GPS freshness and preserves the opening GPS when notes are edited. Only visit closing can supply closing GPS.
+
+Previously saved visits without GPS cannot be plotted until a genuine closing GPS is recorded through the permitted visit workflow. Historical missing locations are not reconstructed from a customer’s latest address. At least two saved captures are needed for distance. Straight-line kilometres appear automatically; use **Calculate road estimate** for Google driving kilometres, with the Routes API enabled and server key configured. Multiple captures at identical coordinates can overlap on the map; select their numbered entries in the list to inspect each capture.
