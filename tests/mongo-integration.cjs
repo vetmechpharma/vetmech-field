@@ -529,6 +529,10 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  await ok(await reports.POST(request({month:targetMonth,email:monthMR.email,target:350000})));
  const independent=await ok(await reports.GET(reportURL(monthMR.email,targetMonth,true)));assert.equal(independent.summaries.find(s=>s.email===monthMR.email).target,35000000);assert(independent.summaries.filter(s=>s.email!==monthMR.email&&targetLines.some(t=>t.email===s.email)).every(s=>s.target===10000));
  await ok(await reports.POST(request({month:'2030-10',targets:[{email:monthMR.email,target:250000}]})));
+ const targetConfirm=await ok(await reports.POST(request({month:targetMonth,email:monthMR.email,target:350000.25,expectedTarget:350000})));assert.equal(targetConfirm.month,targetMonth);assert.deepEqual(targetConfirm.targets,[{email:monthMR.email,target:350000.25}]);
+ await ok(await reports.POST(request({month:targetMonth,email:monthMR.email,target:999999,expectedTarget:350000})),409);
+ const targetAudit=sql.prepare("SELECT * FROM admin_audit WHERE entity_kind='Monthly target' AND entity_id=? ORDER BY created DESC,rowid DESC LIMIT 1").get(`monthly-target:${monthMR.email}:${targetMonth}`);assert.equal(JSON.parse(targetAudit.after_data).target,350000.25);assert.equal(JSON.parse(targetAudit.before_data).target,350000);
+ const reread=await ok(await reports.GET(reportURL(monthMR.email,targetMonth,true)));assert.equal(reread.summaries.find(s=>s.email===monthMR.email).target,35000025);
  const nextSummary=await ok(await reports.GET(reportURL(monthMR.email,'2030-12',true)));assert(nextSummary.summaries.every(s=>s.target===0&&!s.targetSaved));
  identity=alice;await ok(await reports.POST(request({month:targetMonth,total:100*targetLines.length,targets:targetLines})),403);identity=owner;
  sql.prepare("INSERT INTO period_locks(month,closed,closure_id,updated,admin_email,reason) VALUES (?,1,'monthly-target-lock',?,?,?)").run(targetMonth,new Date().toISOString(),owner.email,'Monthly target test');

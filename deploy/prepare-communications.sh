@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Keep administrative commands available when the caller supplies a Node-only PATH.
+export PATH="${PATH:-/usr/local/bin:/usr/bin:/bin}:/usr/sbin:/sbin"
 # One-time additive setup after pulling this update; prints no credentials.
 set -Eeuo pipefail
 [[ $EUID == 0 ]] || { echo 'Run with sudo.' >&2; exit 1; }

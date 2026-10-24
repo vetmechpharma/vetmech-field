@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Keep administrative commands available when the caller supplies a Node-only PATH.
+export PATH="${PATH:-/usr/local/bin:/usr/bin:/bin}:/usr/sbin:/sbin"
 # Install root-owned as /usr/local/sbin/vetmech-deploy. Do not run from a web endpoint.
 set -Eeuo pipefail
 umask 027
