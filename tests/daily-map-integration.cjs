@@ -6,6 +6,32 @@ module.exports=async({load,root,sql,ok,request,owner,alice,bob,who})=>{
  who(null);await ok(await api.GET(get()),401);who(alice);await ok(await api.GET(get(bob.email)),403);await ok(await api.GET(new Request('https://app.test/api/daily-map?settings=1')),403);
  const mine=await ok(await api.GET(get()));assert.equal(mine.points.length,30);assert.equal(mine.visits,28);assert.equal(mine.reps.length,1);assert(!JSON.stringify(mine).includes('Other MR private'));assert(!JSON.stringify(mine).includes('sealedKey'));await ok(await api.GET(get(alice.email,'2030-02-30')),400);
  who(owner);assert.equal((await ok(await api.GET(get(bob.email)))).points.length,1);
+ // Customer captures are separate from visits and remain tied to the capturing MR.
+ const history=load(path.join(root,'lib/customer-gps-history.ts')),server=load(path.join(root,'lib/server.ts'));
+ const captureDay='2030-04-12',stamp='2030-04-12T06:30:00.000Z',customer={Name:'Captured customer',Location:'11.1, 77.1','Location captured at':stamp,'Location address':'Customer premises'};
+ sql.prepare('INSERT INTO records(id,owner,kind,data,created,assigned_to) VALUES (?,?,?,?,?,?)').run('daily-customer',alice.id,'Customers',JSON.stringify(customer),stamp,alice.email);
+ who(alice);const legacy=await ok(await api.GET(get(alice.email,captureDay)));assert.equal(legacy.points.length,1);assert.equal(legacy.visits,0);assert.equal(legacy.points[0].kind,'Customer capture');assert(legacy.points[0].legacyAttribution);
+ // Persist the actual capture, then move the customer to Bob. Alice retains her history.
+ const event=history.customerGPSSnapshot('daily-customer',customer,alice.id,alice.email);
+ sql.prepare('INSERT INTO records(id,owner,kind,data,created,assigned_to) VALUES (?,?,?,?,?,?)').run(event.id,event.owner,event.kind,JSON.stringify(event.data),event.created,event.assigned_to);
+ // Sync the Mongo-backed writes into the test fixture using a route before editing SQL.
+ const real=await api.GET(get(alice.email,captureDay));const actual=await ok(real);assert.equal(actual.points.length,1);assert.equal(actual.points[0].legacyAttribution,false);
+ sql.prepare('UPDATE records SET assigned_to=? WHERE id=?').run(bob.email,'daily-customer');
+ who(owner);assert.equal((await ok(await api.GET(get(bob.email,captureDay)))).points.length,0);assert.equal((await ok(await api.GET(get(alice.email,captureDay)))).points.length,1);
+ const later={...customer,Location:'11.2, 77.2','Location captured at':'2030-04-12T07:30:00.000Z'};
+ const snapshot=history.customerGPSSnapshot('daily-customer',later,alice.id,alice.email);assert(snapshot);assert.notEqual(snapshot.id,actual.points[0].recordId);
+ assert.equal(history.customerGPSSnapshot('c',{...customer,'Location source':'Latest MR visit GPS'},alice.id,alice.email),null);
+ assert.equal(history.customerGPSSnapshot('c',{...customer,'Location captured at':''},alice.id,alice.email),null);
+ // Exercise snapshot persistence through the actual customer save handler.
+ who(owner);const recordsAPI=load(path.join(root,'app/api/records/route.ts'));
+ const routeRow=sql.prepare("SELECT id,data FROM records WHERE kind='Routes' LIMIT 1").get();assert(routeRow);
+ const created=await ok(await recordsAPI.POST(request({kind:'Customers',assignedTo:alice.email,data:{...customer,Name:'Snapshot integration unique','Route ID':routeRow.id,'Customer category':'Doctor'}})));
+ let captures=sql.prepare("SELECT * FROM records WHERE kind='Customer GPS capture'").all().filter(r=>JSON.parse(r.data)['Customer ID']===created.id);assert.equal(captures.length,1);assert.equal(captures[0].assigned_to,owner.email);
+ const savedCustomer=JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(created.id).data);
+ await ok(await recordsAPI.POST(request({id:created.id,kind:'Customers',assignedTo:alice.email,data:{...savedCustomer,...later,Name:'Snapshot integration unique'}})));
+ captures=sql.prepare("SELECT * FROM records WHERE kind='Customer GPS capture'").all().filter(r=>JSON.parse(r.data)['Customer ID']===created.id);assert.equal(captures.length,2);assert(captures.every(r=>r.assigned_to===owner.email));
+ // Admin captures must not be presented as the assigned MR's own travel.
+ assert(!(await ok(await api.GET(get(alice.email,captureDay)))).points.some(p=>p.customerId===created.id));
  const browserKey='Browser-key-synthetic-123456',serverKey='Server-key-synthetic-987654';
  const config={enabled:true,browserKey,mapId:'test-map-id',serverKey};
  who(alice);await ok(await api.POST(request({action:'settings',config})),403);who(owner);await ok(await api.POST(request({action:'settings',config},'POST','https://evil.test')),403);

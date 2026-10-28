@@ -72,7 +72,7 @@ export function DeliveryLogList({logs, admin, channel, busy, onAction}: {
           <div className="field-actions">
             {admin && channel === 'whatsapp' && log.gateway_id && log.gateway_url?.endsWith('/api/v1/messages/send') &&
               <button type="button" className="secondary" disabled={busy} onClick={() => onAction({action: 'status', id: log.id})}>Check gateway status</button>}
-            {admin && !log.gateway_id && ['queued', 'awaiting_setup', 'failed', 'missing_phone'].includes(log.status) &&
+            {admin && !log.id.startsWith('broadcast:') && !log.gateway_id && ['queued', 'awaiting_setup', 'failed', 'missing_phone'].includes(log.status) &&
               <button type="button" className="secondary" disabled={busy} onClick={() => onAction({action: 'retry', channel, id: log.id})}>Retry after correction</button>}
           </div>
         </div>

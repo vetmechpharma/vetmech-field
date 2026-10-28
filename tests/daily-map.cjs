@@ -12,3 +12,7 @@ assert.equal(dailyPoints([{id:'wrong-day',kind:'Attendance',created:'2030-04-09T
 assert.equal(dailyPoints([{id:'same',kind:'Attendance',created:g('08').capturedAt,data:{'GPS data':JSON.stringify(g('08'))}}],day).straightKm,0);
 const many=Array.from({length:60},(_,i)=>i),chunks=routeChunks(many);assert.deepEqual(chunks.map(c=>c.length),[27,27,8]);assert.equal(chunks[0].at(-1),chunks[1][0]);assert.equal(chunks[1].at(-1),chunks[2][0]);assert.equal(chunks.reduce((sum,c)=>sum+c.length-1,0),59);
 console.log('PASS: daily GPS chronology, IST boundaries, invalid GPS, separate opening/closing addresses, duplicate capture suppression, straight-line distance and complete multi-request route coverage.');
+
+const captures=dailyPoints([...rows,{id:'customer-capture',kind:'Customer GPS capture',created:g('12').capturedAt,data:{Customer:'New customer','Customer ID':'c1',Location:'11.05, 77','Location captured at':g('12').capturedAt,'Legacy attribution':'Yes'}}],day);
+assert.equal(captures.points.length,5);assert.equal(captures.visits,1);assert.equal(captures.points[3].kind,'Customer capture');assert.equal(captures.points[3].name,'New customer');assert(captures.points[3].legacyAttribution);
+assert.equal(dailyPoints([{id:'c',kind:'Customer GPS capture',created:g('12').capturedAt,data:{Location:'11,77','Location captured at':'2030-04-09T10:00:00Z'}}],day).points.length,0);

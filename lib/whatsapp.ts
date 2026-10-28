@@ -29,6 +29,7 @@ async function recordForwarding(row:any){
 async function dispatchWhatsApp(id:string){
  await cleanupCommunicationLogs();
  const config=await communicationConfig(),row=await db().prepare('SELECT * FROM whatsapp_outbox WHERE id=?').bind(id).first<any>();
+ if(row?.visit_id?.startsWith('broadcast:'))return; // Attachments and reviewed broadcasts must never retry as plain text.
  if(!row||![ 'awaiting_setup','failed','missing_phone'].includes(row.status)||row.gateway_id)return;
  if(Date.parse(row.created)<Date.now()-30*86400000)return;
  const blocked=await messageBlock(row);if(blocked){await db().prepare("UPDATE whatsapp_outbox SET status='superseded',error=? WHERE id=?").bind(blocked,id).run();return;}

@@ -15,7 +15,7 @@
     "data:export": "node scripts/export-sqlite.mjs",
     "data:import": "node --env-file=.env scripts/import-mongo.mjs",
     "test:mongo": "node tests/mongo-integration.cjs",
-    "test:ui": "node tests/native-target-ui.cjs && node tests/monthly-target-ui.cjs && node tests/daily-map-ui.cjs && node tests/workspace-render.cjs && node tests/monthly-tour-ui.cjs",
+    "test:ui": "node tests/customer-messages-ui.cjs && node tests/native-target-ui.cjs && node tests/monthly-target-ui.cjs && node tests/daily-map-ui.cjs && node tests/workspace-render.cjs && node tests/monthly-tour-ui.cjs",
     "test:security": "node tests/http-security.cjs",
     "test:domain": "node tests/daily-map.cjs && node tests/product-pricing.cjs && node tests/product-csv.cjs && node tests/batch-closing.cjs && node tests/order-communications.cjs"
   },

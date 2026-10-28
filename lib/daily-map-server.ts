@@ -1,3 +1,4 @@
+import {customerGPSKind,customerGPSSnapshot} from './customer-gps-history';
 import {db,HttpError} from './server';
 import {seal,unseal} from './communication-settings';
 import {audit} from './admin-audit';
@@ -17,9 +18,14 @@ export async function loadDay(viewer:Member,date:string,email:string){
  const mr=reps.find(m=>m.email===(email||reps[0]?.email));if(!mr&&email)throw new HttpError(404,'Representative not found.');
  if(!mr)return {date,mr:null,reps:[],points:[],missingGPS:0,straightKm:0,visits:0};
  const start=new Date(date+'T00:00:00+05:30'),end=new Date(start.getTime()+86400000);
- const rr=await db().prepare("SELECT * FROM records WHERE kind IN ('Attendance','Visits') AND (assigned_to=? OR (COALESCE(assigned_to,'')='' AND owner=?)) AND (json_extract(data,'$.Date')=? OR (COALESCE(json_extract(data,'$.Date'),'')='' AND created>=? AND created<?)) ORDER BY created LIMIT 2001").bind(mr.email,mr.user_id||'__no_owner__',date,start.toISOString(),end.toISOString()).all<any>();
+ const rr=await db().prepare("SELECT * FROM records WHERE kind IN ('Attendance','Visits','Customer GPS capture') AND (assigned_to=? OR (COALESCE(assigned_to,'')='' AND owner=?)) AND (json_extract(data,'$.Date')=? OR (COALESCE(json_extract(data,'$.Date'),'')='' AND created>=? AND created<?)) ORDER BY created LIMIT 2001").bind(mr.email,mr.user_id||'__no_owner__',date,start.toISOString(),end.toISOString()).all<any>();
  if(rr.results.length>2000)throw new HttpError(413,'Too many records for one day. Ask Admin to review duplicate records.');
- return {date,mr:{email:mr.email,name:mr.name},reps:reps.map(m=>({email:m.email,name:m.name,status:m.status})),...dailyPoints(rr.results,date)};
+ const customers=await db().prepare("SELECT * FROM records WHERE kind='Customers' AND (assigned_to=? OR (COALESCE(assigned_to,'')='' AND owner=?)) AND json_extract(data,'$.\"Location captured at\"')>=? AND json_extract(data,'$.\"Location captured at\"')<? LIMIT 2001").bind(mr.email,mr.user_id||'__no_owner__',start.toISOString(),end.toISOString()).all<any>();
+ const legacy=customers.results.map(r=>customerGPSSnapshot(r.id,JSON.parse(r.data),r.owner,r.assigned_to,true)).filter(r=>r!==null);
+ // A real snapshot takes precedence over the current, mutable customer location.
+ const candidates=[];for(const r of legacy){const saved=await db().prepare("SELECT id FROM records WHERE id=? AND kind=?").bind(r.id,customerGPSKind).first();if(!saved)candidates.push(r);}
+ if(rr.results.length+candidates.length>2000||customers.results.length>2000)throw new HttpError(413,'Too many GPS captures for one day.');
+ return {date,mr:{email:mr.email,name:mr.name},reps:reps.map(m=>({email:m.email,name:m.name,status:m.status})),...dailyPoints([...rr.results,...candidates],date)};
 }
 async function permitGoogle(actor:Member,config:Awaited<ReturnType<typeof mapConfig>>){if(!config.enabled||!config.sealedKey)throw new HttpError(400,'Admin must enable Google Maps and configure the server API key.');const now=Date.now();const row=await db().prepare('INSERT INTO login_limits (key,attempts,expires) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN expires<=? THEN 1 ELSE attempts+1 END,expires=CASE WHEN expires<=? THEN excluded.expires ELSE expires END RETURNING attempts').bind('daily-map:'+actor.email,now+60000,now,now).first<{attempts:number}>();if((row?.attempts||0)>12)throw new HttpError(429,'Please wait a minute before requesting more Google lookups.');return unseal(config.sealedKey);}
 async function googleJSON(url:string,init:RequestInit){let r:Response;try{r=await fetch(url,{...init,redirect:'error',signal:AbortSignal.timeout(12000)});}catch{throw new HttpError(502,'Google could not be reached. Your saved GPS points are still available.');}if(!r.ok)throw new HttpError(502,'Google request failed. Check enabled APIs, key restrictions and billing in Google Cloud.');try{return await r.json();}catch{throw new HttpError(502,'Google returned an unreadable response.');}}
