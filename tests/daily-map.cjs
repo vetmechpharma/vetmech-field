@@ -16,3 +16,7 @@ console.log('PASS: daily GPS chronology, IST boundaries, invalid GPS, separate o
 const captures=dailyPoints([...rows,{id:'customer-capture',kind:'Customer GPS capture',created:g('12').capturedAt,data:{Customer:'New customer','Customer ID':'c1',Location:'11.05, 77','Location captured at':g('12').capturedAt,'Legacy attribution':'Yes'}}],day);
 assert.equal(captures.points.length,5);assert.equal(captures.visits,1);assert.equal(captures.points[3].kind,'Customer capture');assert.equal(captures.points[3].name,'New customer');assert(captures.points[3].legacyAttribution);
 assert.equal(dailyPoints([{id:'c',kind:'Customer GPS capture',created:g('12').capturedAt,data:{Location:'11,77','Location captured at':'2030-04-09T10:00:00Z'}}],day).points.length,0);
+
+const {customerPhone}=load('lib/customer-phone.ts');
+for(const input of ['9876543210','919876543210','+91 98765 43210','00919876543210','91919876543210','09876543210'])assert.equal(customerPhone(input),'+919876543210');
+assert.equal(customerPhone('9123456789'),'+919123456789');assert.equal(customerPhone(''),'');assert.equal(customerPhone('+442079460958'),'+442079460958');assert.equal(customerPhone('123'), '123');

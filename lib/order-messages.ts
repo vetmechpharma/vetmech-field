@@ -1,3 +1,4 @@
+import {customerPhone} from './customer-phone';
 import {COMPANY_STOCK_ID,COMPANY_NAME} from './supply';
 import {communicationConfig} from './communication-settings';
 import {renderMessage,stockistOrderPhone,doctorName,messageDate,quantityItems,splitMessage,type TemplateKey} from './message-templates';
@@ -5,7 +6,7 @@ import {emailStatement} from './email';
 import {db} from './server';
 import type {Member} from './permissions';
 import type {PricedLine} from './field-rules';
-export function phoneNumber(raw:string){let n=(raw||'').replace(/\D/g,'');if(n.length===10)n='91'+n;return /^[1-9]\d{9,14}$/.test(n)?n:'';}
+export function phoneNumber(raw:string){let n=customerPhone(raw).replace(/\D/g,'');if(n.length===10)n='91'+n;return /^[1-9]\d{9,14}$/.test(n)?n:'';}
 export function whatsappStatements(groupId:string,ref:string,mr:string,phone:string,body:string){
  const parts=splitMessage(body),ids=parts.map((_,i)=>i?`${groupId}:part:${i+1}`:groupId),created=new Date().toISOString();
  return {ids,statements:parts.map((message,i)=>db().prepare("INSERT INTO whatsapp_outbox(id,visit_id,mr_email,phone,message,status,error,created,group_id) VALUES (?,?,?,?,?,'awaiting_setup','',?,?)").bind(ids[i],ref,mr,phone,message,created,groupId))};

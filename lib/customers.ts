@@ -1,3 +1,4 @@
+import {customerPhone} from './customer-phone';
 export const customerCategories=['Doctor','Medical / Clinic','Farmer','Livestock Inspector','Other'] as const;
 export type CustomerCategory=typeof customerCategories[number];
 export type CustomerData=Record<string,string>;
@@ -11,7 +12,7 @@ export function customerCategory(data:CustomerData):CustomerCategory {
  return 'Other';
 }
 export function stockistIDs(data:CustomerData):string[]{try{const parsed=JSON.parse(data['Stockist IDs']||'[]');return Array.isArray(parsed)?Array.from(new Set(parsed.filter((v):v is string=>typeof v==='string'))):[]}catch{return []}}
-export function normalizeCustomer(data:CustomerData):CustomerData{return {...data,'Customer category':customerCategory(data),'Mobile 1':data['Mobile 1']||data.Phone||'','Mobile 2':data['Mobile 2']||'',Email:data.Email||'','Stockist IDs':JSON.stringify(stockistIDs(data))};}
+export function normalizeCustomer(data:CustomerData):CustomerData{return {...data,'Customer category':customerCategory(data),'Mobile 1':customerPhone(data['Mobile 1']||data.Phone||''),'Mobile 2':customerPhone(data['Mobile 2']||''),Email:data.Email||'','Stockist IDs':JSON.stringify(stockistIDs(data))};}
 export function customerDisplayName(data:CustomerData){const prefix=customerCategory(data)==='Doctor'?data.Prefix?.trim():undefined,name=data.Name||'';return prefix&&!name.toLowerCase().startsWith(prefix.toLowerCase())?`${prefix} ${name}`:name;}
 export function validateCustomer(data:CustomerData,today:string):string|null{
  if(data['Customer category']&&!customerCategories.includes(data['Customer category'] as CustomerCategory))return 'Choose a valid customer category.';

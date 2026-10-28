@@ -1,3 +1,4 @@
+import {customerPhone} from '../../../lib/customer-phone';
 import {customerGPSKind,customerGPSStatements} from '../../../lib/customer-gps-history';
 import {secondarySale} from '../../../lib/order-workflow';
 import {normalizeProductCategory} from '../../../lib/product-catalogue';
@@ -60,6 +61,7 @@ export async function POST(req:Request){try{
  for(const k of numbers)if(b.data[k]!==undefined&&b.data[k]!==''&&(!Number.isFinite(Number(b.data[k]))||Number(b.data[k])<0))throw new HttpError(400,`${k} must be zero or greater.`);
 
  if(b.kind==='Customers'){
+  for(const field of ['Mobile 1','Mobile 2','Phone'])if(b.data[field])b.data[field]=customerPhone(b.data[field]);
   if(m.role==='mr'&&existing)throw new HttpError(403,'Only Admin can edit customer details.');
   const route=b.data['Route ID']?await db().prepare("SELECT id,data FROM records WHERE kind='Routes' AND id=?").bind(b.data['Route ID']).first<{id:string;data:string}>():await db().prepare("SELECT id,data FROM records WHERE kind='Routes' AND json_extract(data,'$.Name')=?").bind(b.data.Route||'').first<{id:string;data:string}>();
   if(!route)throw new HttpError(400,'Select the customer route.');

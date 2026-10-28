@@ -25,9 +25,9 @@ module.exports=async({load,root,sql,ok,request,owner,alice,bob,who})=>{
  // Exercise snapshot persistence through the actual customer save handler.
  who(owner);const recordsAPI=load(path.join(root,'app/api/records/route.ts'));
  const routeRow=sql.prepare("SELECT id,data FROM records WHERE kind='Routes' LIMIT 1").get();assert(routeRow);
- const created=await ok(await recordsAPI.POST(request({kind:'Customers',assignedTo:alice.email,data:{...customer,Name:'Snapshot integration unique','Route ID':routeRow.id,'Customer category':'Doctor'}})));
+ const created=await ok(await recordsAPI.POST(request({kind:'Customers',assignedTo:alice.email,data:{...customer,Name:'Snapshot integration unique','Mobile 1':'9770000123','Mobile 2':'+91 9770000124','Route ID':routeRow.id,'Customer category':'Doctor'}})));
  let captures=sql.prepare("SELECT * FROM records WHERE kind='Customer GPS capture'").all().filter(r=>JSON.parse(r.data)['Customer ID']===created.id);assert.equal(captures.length,1);assert.equal(captures[0].assigned_to,owner.email);
- const savedCustomer=JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(created.id).data);
+ const savedCustomer=JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(created.id).data);assert.equal(savedCustomer['Mobile 1'],'+919770000123');assert.equal(savedCustomer.Phone,'+919770000123');assert.equal(savedCustomer['Mobile 2'],'+919770000124');
  await ok(await recordsAPI.POST(request({id:created.id,kind:'Customers',assignedTo:alice.email,data:{...savedCustomer,...later,Name:'Snapshot integration unique'}})));
  captures=sql.prepare("SELECT * FROM records WHERE kind='Customer GPS capture'").all().filter(r=>JSON.parse(r.data)['Customer ID']===created.id);assert.equal(captures.length,2);assert(captures.every(r=>r.assigned_to===owner.email));
  // Admin captures must not be presented as the assigned MR's own travel.

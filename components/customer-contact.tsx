@@ -1,16 +1,17 @@
 'use client';
+import {customerPhone} from '../lib/customer-phone';
 import {Phone,MapPin,Mail,MessageCircle} from 'lucide-react';
 import {customerDisplayName,customerCategory} from '../lib/customers';
 import {parseGPS} from '../lib/business';
 export function dialNumber(raw:string){
- const value=String(raw||'').trim();if(!value||/[^+\d\s().-]/.test(value)||(/\+/.test(value)&&!value.startsWith('+')))return '';
+ const value=customerPhone(raw);if(!value||/[^+\d\s().-]/.test(value)||(/\+/.test(value)&&!value.startsWith('+')))return '';
  let digits=value.replace(/\D/g,'');if(value.startsWith('00'))digits=digits.slice(2);
  if(!value.startsWith('+')&&!value.startsWith('00')){if(digits.length===11&&digits.startsWith('0'))digits=digits.slice(1);if(digits.length===10)digits='91'+digits;}
  return /^[1-9]\d{6,14}$/.test(digits)?'+'+digits:'';
 }
 export function whatsappNumber(raw:string){const dial=dialNumber(raw);return dial?dial.slice(1):'';}
 export function CustomerPhones({data}:{data:Record<string,string>}){
- const numbers=[data['Mobile 1']||data.Phone,data['Mobile 2']].filter((p,i,all)=>p&&all.findIndex(v=>(dialNumber(v)||v)===(dialNumber(p)||p))===i);
+ const numbers=[data['Mobile 1']||data.Phone,data['Mobile 2']].map(customerPhone).filter((p,i,all)=>p&&all.findIndex(v=>(dialNumber(v)||v)===(dialNumber(p)||p))===i);
  return <div className="customer-contact">{numbers.length?numbers.map((p,i)=>{const dial=dialNumber(p),wa=whatsappNumber(p);return <div className="customer-phone-entry" key={dial||p}><span className="customer-phone-number">{p}{i>0&&<small>Mobile 2</small>}</span>{dial?<div className="customer-contact-actions no-print"><a className="customer-call" href={'tel:'+dial} aria-label={`Call ${data.Name||'customer'} at ${p}`} title="Open your device’s calling app"><Phone size={16}/><span>Call</span></a><a className="customer-whatsapp" href={'https://wa.me/'+wa} target="_blank" rel="noopener noreferrer" aria-label={`Open WhatsApp for ${data.Name||'customer'} at ${p}`} title="Open WhatsApp chat; no message is sent automatically"><MessageCircle size={16}/><span>WhatsApp</span></a></div>:<small className="customer-phone-invalid">Check phone number</small>}</div>}):'—'}</div>
 }
 export function CustomerLocation({data}:{data:Record<string,string>}){const gps=parseGPS(data.Location||''),address=data['Location address']||data['Location name'],date=data['Location captured at'];return <div className="customer-location"><span>{address|| (gps?'Area address unavailable':'Location not yet captured')}</span>{gps&&<><a className="customer-map" href={`https://www.google.com/maps/search/?api=1&query=${gps.lat},${gps.lng}`} target="_blank" rel="noopener noreferrer"><MapPin size={14}/>View location</a>{date&&<small>{data['Location visit ID']?'Latest visit':'Captured'} · {new Date(date).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'})}</small>}<small>{data['Location MR']||''}</small><details className="no-print"><summary>GPS details</summary>{gps.lat.toFixed(6)}, {gps.lng.toFixed(6)}<br/>Approximate device location</details></>}</div>}
