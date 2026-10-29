@@ -63,8 +63,9 @@ async function popupInteractions(dialog){
  assert.equal(proposalSummaries().filter(s=>s.textContent.includes('ORDER-ONE')).length,1);assert.equal(proposalSummaries().filter(s=>s.textContent.includes('ORDER-TWO')).length,1);
  assert(!proposalSummaries().some(s=>s.textContent.includes('ORDER-REVIEWED')));assert(proposalSummaries().every(s=>s.textContent.includes('2026-10-18')));
  assert(!document.querySelector('.approval-workspace').textContent.includes('No pending requests.'));
+ fieldRequests.push({id:'field-approved-test',kind:'outside_customer',status:'Approved',mr_email:'mr@test.invalid',body:{submitted:{Name:'Reviewed field customer',Route:'Erode'}}});await click('Refresh',document.querySelector('.approval-workspace'));assert(!document.querySelector('.field-requests').textContent.includes('Reviewed field customer'));
  const reviewedToggle=()=>[...document.querySelectorAll('.approval-workspace label')].find(l=>l.textContent.includes('Show reviewed requests')).querySelector('input');
- await act(async()=>reviewedToggle().click());assert.equal(proposalSummaries().length,3);
+ await act(async()=>reviewedToggle().click());assert.equal(proposalSummaries().length,3);assert(document.querySelector('.field-requests').textContent.includes('Reviewed field customer'));
  fieldRequests=[proposal('ORDER-ONE','Approved'),proposal('ORDER-TWO'),proposal('ORDER-REVIEWED','Approved')];await click('Refresh',document.querySelector('.approval-workspace'));await act(async()=>reviewedToggle().click());assert.equal(proposalSummaries().length,1);assert(proposalSummaries()[0].textContent.includes('ORDER-TWO'));
  await click('Customer directory',document.querySelector('.sidebar'));await click('Approvals',document.querySelector('.sidebar'));assert.equal(proposalSummaries().length,1);assert.equal(document.querySelectorAll('.view-tools').length,1);
  fieldRequests=[];
