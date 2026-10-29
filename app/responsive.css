@@ -427,15 +427,3 @@
 .reset-delete-button:disabled{opacity:.45;cursor:not-allowed}.reset-delete-button:focus-visible{outline:3px solid #fda4af;outline-offset:3px}
 @media(max-width:700px){.reset-scope{grid-template-columns:1fr}.reset-counts{grid-template-columns:repeat(2,minmax(0,1fr))}.reset-actions>button{flex:1 1 130px}.reset-actions .reset-delete-button{flex-basis:100%}.data-reset-panel .form-grid{grid-template-columns:1fr}}
 @media(max-width:400px){.reset-counts{grid-template-columns:1fr}.reset-review-heading h3{font-size:16px}}
-
-/* Keep completed product pricing compact without removing editable line values. */
-.order-line-rates{grid-column:1/-1;min-width:0;border:1px solid #cbdce9;border-radius:10px;background:#fff;overflow:hidden}
-.order-line-rates>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;cursor:pointer;list-style:none;color:#254b63;font-size:14px;font-weight:700;min-height:44px}
-.order-line-rates>summary::-webkit-details-marker{display:none}
-.order-line-rates>summary small{display:block;font-size:13px;font-weight:500;color:#5e7182;margin-top:4px;overflow-wrap:anywhere}
-.order-line-rates>summary svg{flex-shrink:0;transition:transform .15s}
-.order-line-rates[open]>summary svg{transform:rotate(180deg)}
-.order-line-rates>summary:focus-visible{outline:3px solid #8abce9;outline-offset:-3px}
-.order-line-rate-details{display:grid;gap:12px;padding:0 12px 12px;min-width:0}
-.order-line-rate-details>label{max-width:100%}
-.order-line-rate-details .order-product-reference{margin:0}

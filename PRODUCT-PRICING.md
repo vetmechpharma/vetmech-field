@@ -134,7 +134,3 @@ new environment variable or Nginx change is required.
 Automated checks cover calculator boundaries, exact half-paise rounding, free-unit
 and percentage schemes, profit/loss, CSV compatibility, MR cost privacy, server-side
 recalculation, direct proposals, saved-order price preservation and UI input changes.
-
-## Compact order entry
-
-Product selectors show the brand name with its packing, including in sample commitments. Each secondary-order line keeps product, quantity and scheme controls visible. Rates and GST are grouped in an expandable panel. New selections show all pricing; adding another product collapses completed pricing panels, and saved or resumed order lines start compact. Expand a panel to review the existing GST and rate breakdown. Explicit repricing opens the panels for review. Collapsing is local display state and does not change quantities, selected schemes, special proposed rates, saved GST or the submitted order data.
