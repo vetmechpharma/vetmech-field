@@ -255,4 +255,27 @@ await click('Orders',document.querySelector('.sidebar'));await act(async()=>root
  console.log('PASS: reset counts and scope, cancel, exact confirmation/password/acknowledgement, stale-review recovery, cleared secrets and Admin sign-in success notice.');
 
 
+ // A brand can have separate product records for each pack. Completed price panels collapse without losing form values.
+ const packedRows=[...records.filter(r=>r.kind!=='Products'),...['100 ml','500 ml'].map((pack,index)=>({id:`pack-${index}`,kind:'Products',created:'2026-10-01',data:{Name:'REGULAN Injection',Pack:pack,MRP:'210',PTS:'100',PTR:'120','GST %':'5'}}))];
+ const preservedLine=load(path.join(rootDir,'lib/field-rules.ts')).orderLine({Name:'REGULAN Injection',Pack:'100 ml',PTS:'80',PTR:'90','GST %':'18'},'pack-0',5,'none');
+ const savedOrder={...uiOrder,id:'packing-order',number:'PACK-ORDER',items:[preservedLine],subtotal:preservedLine.subtotal,total:preservedLine.total};
+ let packedPayload;
+ global.fetch=async(url,init)=>{if(url==='/api/commerce'){if(init?.method==='POST')packedPayload=JSON.parse(init.body);return new Response(JSON.stringify({stock:[],invoices:[savedOrder],requests:[],edits:[],commitments:[]}));}if(String(url).startsWith('/api/customer-history'))return new Response(JSON.stringify({orders:[]}));return new Response('{}');};
+ root=createRoot(document.getElementById('root'));await act(async()=>root.render(React.createElement(orderUI,{tab:'Orders',rows:packedRows,admin:false,refresh:async()=>{}})));await settle();
+ await click('Take order');await select('Customer','c');await select('Supply from','company-stock');
+ let packSelect=document.querySelector('.invoice-line-editor select');assert.deepEqual([...packSelect.options].slice(1).map(o=>o.textContent),['REGULAN Injection — 100 ml','REGULAN Injection — 500 ml']);
+ await select('Product','pack-0');let firstRates=document.querySelector('.order-line-rates');await settle();assert(firstRates.open,'A newly selected product must show all rates');
+ const firstQuantity=[...document.querySelectorAll('.invoice-line-editor label')].find(l=>l.firstChild.textContent==='Quantity').querySelector('input');await inputValue(firstQuantity,'7');
+ const proposed=[...document.querySelectorAll('.order-line-rates label')].find(l=>l.firstChild.textContent.startsWith('Special proposed rate')).querySelector('input');await inputValue(proposed,'85.50');
+ await click('Add another product');await settle();assert(!firstRates.open,'Adding another product must collapse completed pricing');assert.equal(firstQuantity.value,'7');assert.equal(Number(proposed.value),85.5);
+ const packSelects=[...document.querySelectorAll('.invoice-line-editor select')].filter(el=>el.parentElement.firstChild.textContent==='Product');
+ await act(async()=>{packSelects[1].value='pack-1';packSelects[1].dispatchEvent(new dom.window.Event('change',{bubbles:true}));});await settle();
+ const rates=[...document.querySelectorAll('.order-line-rates')];assert.equal(rates.length,2);assert(!rates[0].open);assert(rates[1].open);assert(rates[1].querySelector('summary').textContent.includes('500 ml'));
+ await act(async()=>{rates[0].open=true;rates[0].dispatchEvent(new dom.window.Event('toggle'));});await settle();assert(rates[0].open);assert(rates[0].textContent.includes('GST 5%'));assert.equal(firstQuantity.value,'7');assert.equal(Number(proposed.value),85.5);
+ await act(async()=>document.querySelectorAll('.invoice-line-editor>.icon-button')[1].click());await settle();assert.equal(document.querySelectorAll('.invoice-line-editor').length,1);assert.equal(firstQuantity.value,'7');
+ await act(async()=>document.querySelector('dialog form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})));await settle();assert.equal(packedPayload.lines.length,1);assert.equal(packedPayload.lines[0].qty,7);assert.equal(packedPayload.lines[0].proposedRate,85.5);assert(!('collapsedRates' in packedPayload));
+ await click('Edit order');await settle();const savedRates=document.querySelector('.order-line-rates');assert(!savedRates.open,'Previously saved order pricing starts compact');
+ await act(async()=>{savedRates.open=true;savedRates.dispatchEvent(new dom.window.Event('toggle'));});await settle();assert(savedRates.textContent.includes('Saved base:'));assert(savedRates.textContent.includes('GST 18%'),'Existing orders retain their saved GST');assert(savedRates.textContent.includes('90.00'),'Existing orders retain their saved base rate');await act(async()=>root.unmount());global.fetch=standardFetch;
+ console.log('PASS: same-brand packing labels, new-row rate visibility, completed/saved pricing collapse, expand-to-view saved GST, retained quantity/proposed rate, stable removal and unchanged order payload.');
+
  assert(!errors.some(e=>/same key|unique.*key|not wrapped|error occurred/i.test(e)),errors.join('\n'));console.error=originalError;console.log('PASS: complete approval page renders each distinct proposal once, refresh/history filters and repeated navigation; workspace forms and multi-product orders; role-specific Admin approval/company completion controls; stockist forwarding labels; approval cards; editable quantity-only templates and gateway status checks.');dom.window.close();})().catch(e=>{console.error=originalError;console.error(e);process.exitCode=1;dom.window.close()});
