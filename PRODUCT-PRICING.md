@@ -134,3 +134,12 @@ new environment variable or Nginx change is required.
 Automated checks cover calculator boundaries, exact half-paise rounding, free-unit
 and percentage schemes, profit/loss, CSV compatibility, MR cost privacy, server-side
 recalculation, direct proposals, saved-order price preservation and UI input changes.
+
+## Company profit by supply source
+
+Admin catalogue pricing and each scheme show separate direct (PTR reference) and stockist (PTS) profit per supplied unit. Order entry and saved secondary-order details show an Admin-only company profit estimate.
+
+- Direct: actual order subtotal excluding GST minus landing cost for paid + free units. No stockist margin is deducted. Proposed special prices are subject to approval; saved orders use their saved subtotal.
+- Stockist: current PTS after the selected percentage discount × paid quantity, minus landing cost for paid + free units. Buy/free schemes use actual supplied quantities, including incomplete groups.
+- Profit percentage is profit divided by total landing cost; zero cost has no percentage. Missing cost/PTS is unavailable, never silently treated as zero.
+- Estimates use current catalogue landing cost and (for stockists) PTS, clearly labelled in the UI. They are not historical accounting snapshots or actual agency-invoice profit; manual primary invoice values are unchanged. Closed reports, sales/target values and customer prices are unchanged. MR responses do not receive landing cost or these profit breakdowns.

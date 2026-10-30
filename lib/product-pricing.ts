@@ -121,3 +121,18 @@ export function profitOnCost(netPTS: number, cost: string | undefined) {
   const amount = netPTS - Number(cost);
   return {amount, percent: Number(cost) > 0 ? amount / Number(cost) * 100 : null};
 }
+
+/** Admin estimate: amounts exclude GST; cost covers paid AND free packed units.
+ * Catalogue PTS/cost are current inputs, not historical accounting snapshots. */
+export function orderCompanyProfit(line: {qty:number; free:number; subtotal:number; schemeDiscount?:number}, product: ProductData, direct:boolean) {
+  const units=line.qty+line.free, rawCost=product['Landing cost'];
+  if (!rawCost?.trim() || !Number.isFinite(Number(rawCost)) || Number(rawCost)<0 || !Number.isInteger(line.qty) || line.qty<1 || !Number.isInteger(line.free) || line.free<0) return null;
+  let revenue=line.subtotal;
+  if (!direct) {
+    if (!product.PTS?.trim() || !Number.isFinite(Number(product.PTS)) || Number(product.PTS)<0) return null;
+    revenue=applyPercentage(Math.round(Number(product.PTS)*100),line.schemeDiscount||0)*line.qty;
+  }
+  if (!Number.isSafeInteger(revenue) || revenue<0) return null;
+  const cost=Math.round(Number(rawCost)*100)*units, amount=revenue-cost;
+  return {revenue:revenue/100,cost:cost/100,amount:amount/100,perUnit:amount/100/units,percent:cost>0?amount/cost*100:null};
+}

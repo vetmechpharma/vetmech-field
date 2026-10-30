@@ -1,5 +1,5 @@
 'use client';
-import {formatPrice as money, orderSchemePreview, withGST, effectiveRates, hasPricingMargins, previewProductPricing, productScheme, profitOnCost, schemeLabel, schemeSlots, type ProductData} from '../lib/product-pricing';
+import {orderCompanyProfit, formatPrice as money, orderSchemePreview, withGST, effectiveRates, hasPricingMargins, previewProductPricing, productScheme, profitOnCost, schemeLabel, schemeSlots, type ProductData} from '../lib/product-pricing';
 import type {PricedLine} from '../lib/field-rules';
 
 function RatePair({label, exGST, inclGST, tone = 'ptr'}: {label: string; exGST: number | null; inclGST: number | null; tone?: string}) {
@@ -9,10 +9,10 @@ function RatePair({label, exGST, inclGST, tone = 'ptr'}: {label: string; exGST: 
     <div className="pricing-tax"><span>Incl. GST</span><strong>{inclGST === null ? '—' : money(inclGST)}</strong></div>
   </div>;
 }
-function Profit({pts, cost}: {pts: number; cost?: string}) {
+function Profit({pts, cost, label}: {pts: number; cost?: string; label: string}) {
   const profit = profitOnCost(pts, cost);
   return <div className={`pricing-profit ${profit && profit.amount < 0 ? 'pricing-loss' : ''}`}>
-    <span>Profit / supplied unit</span><strong>{profit ? money(profit.amount) : '—'}</strong>
+    <span>{label} · profit / supplied unit</span><strong>{profit ? money(profit.amount) : '—'}</strong>
     <span>Profit % on landing cost</span><strong>{profit?.percent == null ? 'Unavailable' : `${profit.percent.toFixed(2)}%`}</strong>
     {!profit && <small>Enter landing cost to calculate profit.</small>}
     {profit?.percent === null && <small>Percentage is unavailable for zero cost.</small>}
@@ -42,7 +42,8 @@ export function ProductPricing({value, onChange, admin, existing = false}: {valu
     <div className="pricing-grid" aria-live="polite">
       <RatePair label="PTR / unit" exGST={ptr} inclGST={ptr === null ? null : withGST(ptr, gst)}/>
       {admin && <RatePair label="PTS / unit" exGST={pts} inclGST={pts === null ? null : withGST(pts, gst)} tone="pts"/>}
-      {admin && pts !== null && <Profit pts={pts} cost={value['Landing cost']}/>}
+      {admin && ptr !== null && <Profit label="Direct · PTR reference" pts={ptr} cost={value['Landing cost']}/>}
+      {admin && pts !== null && <Profit label="Stockist · PTS" pts={pts} cost={value['Landing cost']}/>}
     </div>
     {admin && <p className="field-help">MRP ÷ GST factor → deduct retail margin → deduct stockist margin. Rates save to 2 decimals. Profit is before other business expenses.</p>}
   </section>;
@@ -60,7 +61,8 @@ export function SchemePricing({value, slot, admin}: {value: ProductData; slot: n
     <div className="pricing-grid">
       <RatePair label="Net PTR" exGST={ptr?.exGST ?? null} inclGST={ptr?.inclGST ?? null}/>
       {admin && <RatePair label="Net PTS" exGST={pts?.exGST ?? null} inclGST={pts?.inclGST ?? null} tone="pts"/>}
-      {admin && pts && <Profit pts={pts.exGST} cost={value['Landing cost']}/>}
+      {admin && ptr && <Profit label="Direct · net PTR reference" pts={ptr.exGST} cost={value['Landing cost']}/>}
+      {admin && pts && <Profit label="Stockist · net PTS" pts={pts.exGST} cost={value['Landing cost']}/>}
     </div>
   </div>;
 }
@@ -98,4 +100,13 @@ export function OrderNetRates({line, proposed = false, saved = false, onUseSchem
     <p>{line.qty} paid + {line.free} free = {units} units · GST {line.gst}%{line.schemeDiscount ? ` · ${line.schemeDiscount}% discount` : ''}</p>
     <p>Line total: <b>{money(line.subtotal / 100)}</b> excl. GST · <b>{money(line.total / 100)}</b> incl. GST{proposed ? ' · Subject to Admin approval' : ''}</p>
   </section>;
+}
+
+export function OrderCompanyProfit({line, product, direct, proposed=false}: {line:PricedLine; product:ProductData; direct:boolean; proposed?:boolean}) {
+ const p=orderCompanyProfit(line,product,direct);
+ return <section className={`pricing-profit ${p && p.amount<0?'pricing-loss':''}`} aria-label="Company profit estimate">
+ <b>{direct?'Direct company':'Stockist'} · {proposed?'Proposed':'Estimated'} profit</b>
+ {p ? <><span>Company revenue excl. GST</span><strong>{money(p.revenue)}</strong><span>Landing cost · {line.qty+line.free} supplied units</span><strong>{money(p.cost)}</strong><span>Profit excl. GST</span><strong>{money(p.amount)}</strong><span>Profit % on cost</span><strong>{p.percent===null?'Unavailable':`${p.percent.toFixed(2)}%`}</strong></> : <span>Set valid landing cost{direct?'':' and PTS'} to calculate profit.</span>}
+ <small>Current catalogue landing cost{direct?'; actual order net selling amount, with no stockist margin deduction.':' and PTS; selected order discount and free units applied. Estimate, not agency invoice profit.'} Before other business expenses.{proposed?' Subject to Admin approval.':''}</small>
+ </section>;
 }
