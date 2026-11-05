@@ -1,3 +1,4 @@
+import {earningsKind,earningsHistoryKind} from './monthly-earnings';
 import {customerVisible,idList} from './field-rules';
 export const TEST_MR_EMAIL = 'test-mr@vetmech.invalid';
 export const OWNER_EMAIL = 'vetmechpharma@gmail.com';
@@ -10,13 +11,14 @@ export const sharedKinds=['Products','Stockists','Districts','Headquarters','Rou
 export const adminKinds=['Products','Stockists','Primary sales','Settings','Districts','Headquarters','Routes','MR types','Gifts'];
 export function canRead(user:Member,r:StoredRecord){
  if(user.role==='admin')return true;
+ if([earningsKind,earningsHistoryKind].includes(r.kind))return false;
  if(r.kind==='Customers')return customerVisible(user,r);
  if(r.kind==='Stockists')return idList(user.stockist_ids).includes(r.id);
  if(r.kind==='Routes')return idList(user.route_ids).includes(r.id)||JSON.parse(r.data).Name===user.route;
  if(r.kind==='Districts')return idList(user.district_ids).includes(r.id)||JSON.parse(r.data).Name===user.district;
  return sharedKinds.includes(r.kind)||(!adminKinds.includes(r.kind)&&(r.assigned_to?r.assigned_to===user.email:r.owner===user.user_id));
 }
-export function canWrite(user:Member,r:StoredRecord){return user.role==='admin'||(r.kind!=='Leave'&&r.kind!=='Customers'&&!adminKinds.includes(r.kind)&&(r.assigned_to?r.assigned_to===user.email:r.owner===user.user_id));}
+export function canWrite(user:Member,r:StoredRecord){if([earningsKind,earningsHistoryKind].includes(r.kind)||r.id.startsWith('monthly-target:'))return false;return user.role==='admin'||(r.kind!=='Leave'&&r.kind!=='Customers'&&!adminKinds.includes(r.kind)&&(r.assigned_to?r.assigned_to===user.email:r.owner===user.user_id));}
 export function validateMRFields(kind:string,data:Record<string,string>,existing?:Record<string,string>){
   if(kind==='Expenses'&&data.Status!=='Submitted')return 'Only Admin can approve expenses.';
   if(kind==='Expenses'&&existing&&existing.Status!=='Submitted')return 'Approved or rejected expenses can only be changed by Admin.';
