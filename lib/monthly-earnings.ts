@@ -10,7 +10,7 @@ export type ProductPlan = {productId:string;name:string;packing:string;target:nu
 export type IncentiveSlab = {above:number;rateBps:number};
 export type EarningsPlan = {version:1;revision:number;month:string;mrEmail:string;target:number;salaryBudget:number|null;products:ProductPlan[];slabs:IncentiveSlab[];savedAt:string;savedBy:string;reason:string};
 export type ProductProgress = {productId:string;name:string;packing:string;target:number|null;achieved:number;pending:number|null;percentage:number|null};
-export const percentAmount = (paise:number,bps:number) => Number((BigInt(paise)*BigInt(bps)+5000n)/10000n);
+export const percentAmount = (paise:number,bps:number) => Number((BigInt(paise)*BigInt(bps)+BigInt(5000))/BigInt(10000));
 export function findEarningsPlan(records:Row[],email:string,month:string):EarningsPlan|null {
  return records.find(r=>r.id===earningsID(email,month)&&r.kind===earningsKind)?.data||null;
 }

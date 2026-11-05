@@ -17,12 +17,7 @@ jobs:
         with:
           node-version: '24'
       - run: npm install --global pnpm@11.25.0
-      # Temporary branch-only lock refresh; no repository write token.
-      - run: pnpm install --no-frozen-lockfile
-      - name: Return resolved lockfile
-        run: node -e "console.log('VETMECH_RESOLVED_LOCK='+JSON.stringify(require('fs').readFileSync('pnpm-lock.yaml','utf8')))"
-      - name: TypeScript check
-        run: pnpm exec tsc --noEmit
+      - run: pnpm install --frozen-lockfile
       - run: pnpm test:security
       - run: pnpm test:domain
       - run: pnpm audit --audit-level=low
