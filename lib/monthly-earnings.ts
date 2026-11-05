@@ -1,3 +1,4 @@
+import {applyPercentage} from './product-pricing';
 import {secondarySale} from './order-workflow';
 import {COMPANY_STOCK_ID} from './supply';
 
@@ -76,7 +77,7 @@ export function monthlyEarnings(email:string,userId:string|null,month:string,rec
   let directRevenue=0,stockistRevenue=0,cost=0,complete=true;
   for(const l of list) {
    if(l.legacy||!terms||terms.cost===null||l.direct===false&&terms.pts===null){complete=false;continue;}
-   if(l.direct)directRevenue+=l.net;else stockistRevenue+=(terms!.pts!-percentAmount(terms!.pts!,Math.round(l.discount*100)))*l.qty;
+   if(l.direct)directRevenue+=l.net;else stockistRevenue+=applyPercentage(terms!.pts!,l.discount)*l.qty;
    cost+=terms.cost*(l.qty+l.free);
   }
   const revenue=complete?directRevenue+stockistRevenue:null,landingCost=complete?cost:null,bonus=allocated[index];

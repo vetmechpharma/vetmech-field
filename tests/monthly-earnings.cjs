@@ -21,6 +21,9 @@ const special={...direct,items:[{...line,subtotal:70000,total:73500,free:8}],sub
 report=e.monthlyEarnings(member.email,member.user_id,plan.month,[record,target],[special]);assert.equal(report.salary,7000);assert.equal(report.products[0].landingCost,72000);assert.equal(report.profit,-9000);
 const discount={...order,items:[{...line,schemeDiscount:10,subtotal:72000,total:75600}],subtotal:72000,total:75600};
 report=e.monthlyEarnings(member.email,member.user_id,plan.month,[record,target],[discount]);assert.equal(report.products[0].stockistRevenue,64800);assert.equal(report.salary,7200);
+const halfPaise={...record,data:{...plan,products:[{...plan.products[0],pts:45,cost:0}]}};
+const halfPaiseOrder={...order,items:[{...line,qty:1,free:0,subtotal:100,total:100,schemeDiscount:30}],subtotal:100,total:100};
+assert.equal(e.monthlyEarnings(member.email,member.user_id,plan.month,[halfPaise],[halfPaiseOrder]).products[0].stockistRevenue,32);
 const both=[order,direct,{...order,id:'pending',accepted:0},{...order,id:'cancelled',status:'Cancelled'},{...order,id:'other',mr_email:'other@test'},{...order,id:'next',date:'2026-11-01'},{...order,id:'primary',kind:'primary'}];
 report=e.monthlyEarnings(member.email,member.user_id,plan.month,[record,target],both);assert.equal(report.sales,160000);assert.equal(report.salary,16000);assert.equal(report.incentive.amount,1600);assert.equal(report.totalAllocation,17600);assert.equal(report.profit,30400);
 assert.equal(totals(member,plan.month,[record,target],both).achieved,report.sales);
