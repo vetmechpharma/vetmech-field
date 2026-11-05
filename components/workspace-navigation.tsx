@@ -9,7 +9,7 @@ const groups = [
   {id: 'field', title: 'Field work', icon: MapPin, items: ['Tour plan', 'Visits', 'Follow-ups', 'MR activity', 'Locations', 'Drafts']},
   {id: 'sales', title: 'Sales & stock', icon: ShoppingBag, items: ['Orders', 'Secondary sales', 'Primary sales', 'Stockists', 'Products', 'Stock balance']},
   {id: 'benefits', title: 'Samples & gifts', icon: Gift, items: ['Samples', 'Gifts']},
-  {id: 'reports', title: 'Reports & targets', icon: BarChart3, items: ['Performance', 'Route performance', 'Reports', 'Expenses']},
+  {id: 'reports', title: 'Reports & targets', icon: BarChart3, items: ['Monthly targets', 'Performance', 'Route performance', 'Reports', 'Expenses']},
   {id: 'controls', title: 'Controls & settings', icon: Settings, items: ['Approvals', 'Month closing', 'WhatsApp', 'Admin history', 'Settings']},
 ];
 const groupFor = (tab: string) => groups.find(group => group.items.includes(tab))?.id ?? null;

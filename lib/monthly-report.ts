@@ -1,3 +1,4 @@
+import {productTargetProgress,monthlyEarnings,earningsHistoryKind} from './monthly-earnings';
 import {secondarySale} from './order-workflow';
 import {programmeID,calendarFor,holidayWorkFor,holidayWorkKind,monthDates,dayOff,type Programme,type HolidayWork} from './monthly-tour';
 import {orderStage,orderApproved} from './order-workflow';
@@ -7,14 +8,14 @@ import {attendanceMonth} from './attendance';
 import {customerVisible,idList} from './field-rules';
 import type {Member} from './permissions';
 export type Row=Record<string,any>;
-export type ReportTable={title:string;columns:string[];rows:(string|number)[][];note?:string;webOnly?:boolean};
+export type ReportTable={title:string;columns:string[];rows:(string|number)[][];note?:string;webOnly?:boolean;adminOnly?:boolean};
 export const rupees=(paise:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:2}).format(paise/100);
 export const owned=(r:Row,m:Member)=>r.assigned_to?r.assigned_to===m.email:!!m.user_id&&r.owner===m.user_id;
 export function totals(m:Member,month:string,records:Row[],invoices:Row[]){
  const saved=records.find(r=>r.id===`monthly-target:${m.email}:${month}`),target=Number(saved?.data['MR monthly target']??0)*100;
  const legacy=records.filter(r=>r.kind==='Secondary sales'&&!r.data['Invoice ID']&&owned(r,m)&&(r.data.Date||r.created).startsWith(month));
  const achieved=invoices.filter(i=>secondarySale(i)&&i.mr_email===m.email&&i.date.startsWith(month)).reduce((n,i)=>n+i.subtotal,0)+legacy.reduce((n,r)=>n+Math.round(Number(r.data.Quantity||0)*Number(r.data.Rate||0)*100),0);
- return {email:m.email,name:m.name,target,achieved,pending:Math.max(0,target-achieved),exceeded:saved?Math.max(0,achieved-target):0,percentage:target?achieved/target*100:0,targetSaved:!!saved};
+ return {productTargets:productTargetProgress(m.email,m.user_id,month,records,invoices),email:m.email,name:m.name,target,achieved,pending:Math.max(0,target-achieved),exceeded:saved?Math.max(0,achieved-target):0,percentage:target?achieved/target*100:0,targetSaved:!!saved};
 }
 export function buildReport(m:Member,month:string,records:Row[],invoices:Row[],movements:Row[],benefits:Row[],commitments:Row[],admin:boolean){
  records=records.map(r=>{if(!admin&&r.kind==='Samples'){const data={...r.data};for(const k of ['Unit cost','Sample cost','Cost','Total cost','Rate'])delete data[k];r={...r,data};}if(r.kind!=='Customers')return r;let routeId='';try{routeId=JSON.parse(r.data['MR route access']||'{}')[m.email]}catch{}if(!idList(m.route_ids).includes(routeId))return r;const route=records.find(x=>x.id===routeId);return route?{...r,data:{...r.data,Route:route.data.Name,'Route ID':routeId,District:route.data.District}}:r});
@@ -25,6 +26,22 @@ export function buildReport(m:Member,month:string,records:Row[],invoices:Row[],m
  const visits=period.filter(r=>r.kind==='Visits'&&r.data.Status==='Closed'),secondary=invoices.filter(i=>secondarySale(i)&&i.mr_email===m.email&&i.date.startsWith(month)),primary=invoices.filter(i=>i.kind==='primary'&&stockists.includes(i.stockist_id)&&i.date.startsWith(month));
  const pendingOrders=invoices.filter(i=>i.kind==='secondary'&&i.mr_email===m.email&&i.date.startsWith(month)&&i.status&&i.status!=='Delivered');
  const tables:ReportTable[]=[],add=(title:string,columns:string[],rows:(string|number)[][],note?:string)=>tables.push({title,columns,rows,note});
+ const progress=productTargetProgress(m.email,m.user_id,month,records,invoices);
+ add('Product targets and achievement',['Product','Packing','Target excl. GST','Achieved excl. GST','Achievement','Pending'],progress.map(p=>[p.name,p.packing||'—',p.target===null?'Not set':rupees(p.target),rupees(p.achieved),p.percentage===null?'—':p.percentage.toFixed(1)+'%',p.pending===null?'—':rupees(p.pending)]),'Approved secondary sales from both channels, after schemes and excluding GST. Product targets are specific to this MR and month.');
+ if(admin){
+  const earnings=monthlyEarnings(m.email,m.user_id,month,records,invoices);
+  if(earnings){
+   const money=(v:number|null)=>v===null?'Incomplete costing':rupees(v),plan=earnings.plan;
+   const privateTable=(title:string,columns:string[],rows:(string|number)[][],note?:string)=>tables.push({title,columns,rows,note,adminOnly:true});
+   privateTable('Monthly earnings summary',['Measure','Value'],[
+    ['Plan revision',plan.revision],['Eligible secondary sales excl. GST',rupees(earnings.sales)],['Planned salary budget (reference)',plan.salaryBudget===null?'Not set':rupees(plan.salaryBudget)],['Product salary at targets',rupees(earnings.salaryAtTarget)],['Product salary allocation earned',rupees(earnings.salary)],['Additional incentive rate',earnings.incentive.rateBps/100+'%'],['Additional incentive earned',rupees(earnings.incentive.amount)],['Total MR allocation',rupees(earnings.totalAllocation)],['Sales without product salary allocation',rupees(earnings.unallocatedSales)],['Estimated company profit after MR allocation',money(earnings.profit)]
+   ],'Admin estimate, not payroll payment. Salary percentages apply to actual approved secondary sales excluding GST, with no cap. The budget is a planning reference. Plan revision '+plan.revision+' saved '+plan.savedAt+' by '+plan.savedBy+'. Changes apply to this entire open month and are retained in history.');
+   privateTable('Product salary allocation',['Product','Packing','Secondary sales excl. GST','Salary %','Salary earned','Additional incentive','Total MR allocation'],earnings.products.map(p=>[p.name,p.packing||'—',rupees(p.achieved),p.salaryBps===null?'Not allocated':p.salaryBps/100+'%',rupees(p.salary),rupees(p.incentive),rupees(p.allocation)]),'The highest qualifying incentive rate applies to total monthly sales, then is allocated to products proportionally. Free units earn no sales value; scheme discounts reduce the salary base.');
+   privateTable('Company profit after MR allocation',['Product','Packing','Direct revenue','Stockist revenue (PTS)','Landing cost','Gross profit','MR salary + incentive','Profit after allocation'],earnings.products.map(p=>[p.name,p.packing||'—',money(p.directRevenue),money(p.stockistRevenue),money(p.landingCost),money(p.grossProfit),rupees(p.allocation),money(p.profit)]),'All amounts exclude GST. Direct revenue uses approved order net value; stockist revenue uses the plan’s PTS less scheme discount on paid units. Landing cost includes paid + free units. Cost/PTS are snapshots saved with the monthly plan, not inferred from primary invoice totals. Other business expenses are excluded. Unmapped legacy sales or missing costs show incomplete costing.');
+   privateTable('Monthly incentive slabs',['Secondary sales strictly above','Rate on total monthly sales'],plan.slabs.map(s=>[rupees(s.above),s.rateBps/100+'%']),'Only the highest qualifying slab applies. At exactly a threshold the lower slab remains in effect; rates are not added together. Earnings have no upper cap.');
+   privateTable('Monthly plan revision history',['Revision','Saved at','Admin','Reason'],records.filter(r=>r.kind===earningsHistoryKind&&r.assigned_to===m.email&&r.data.month===month).map(r=>r.data).sort((a,b)=>b.revision-a.revision).map(p=>[p.revision,p.savedAt,p.savedBy,p.reason]));
+  }
+ }
  tables.push(tourReport(m.email,month,records as any));
  add('Order approval, forwarding and cancellation status',['Order number','Date','Customer','Agency','Status','Net order value'],pendingOrders.map(i=>[i.number,i.date,name(i.customer_id),name(i.stockist_id),orderStage(i),rupees(i.subtotal)]),'Approved orders in both channels count toward secondary sales and targets on the original order date, excluding GST. Pending and cancelled orders are excluded. Company completion does not count a second time.');
  const forwarded=pendingOrders.filter(i=>i.status==='Placed'&&i.stockist_id!==COMPANY_STOCK_ID&&orderApproved(i));

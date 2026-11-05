@@ -26,3 +26,5 @@ columns.Customers=['Name','Type','Route','Address','Email','Phone','Registration
 descriptions['Territory setup']='Manage districts, headquarters and routes together.';
 
 descriptions.Locations='Daily GPS captures, recorded locations and estimated travel.';
+
+descriptions['Monthly targets']='Set each MR’s monthly product targets, salary allocation and incentives.';

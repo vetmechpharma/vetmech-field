@@ -1,3 +1,4 @@
+import {earningsID} from '../../../lib/monthly-earnings';
 import {audit} from '../../../lib/admin-audit';
 import {guard} from '../../../lib/operations';
 import {expandProgrammes} from '../../../lib/monthly-tour';
@@ -39,6 +40,9 @@ export async function POST(req:Request){try{
   const expected=Array.isArray(b.targets)?(t as any).expectedTarget:b.expectedTarget;
   if(expected!==undefined&&(expected!==null&&(!Number.isFinite(expected)||expected<1)||expected!==before))throw new HttpError(409,'This MR target changed. Reload the targets before saving again.');
   t.target=Math.round(t.target*100)/100;
+  const planId=earningsID(t.email,b.month),plan=await db().prepare('SELECT data FROM records WHERE id=?').bind(planId).first<{data:string}>();
+  if(plan&&JSON.parse(plan.data).target!==Math.round(t.target*100))throw new HttpError(409,'This target has a product plan. Update it from Monthly targets so product allocations remain consistent.');
+  writes.push(plan?guard('version','EXISTS(SELECT 1 FROM records WHERE id=? AND data=?)',[planId,plan.data]):guard('version','NOT EXISTS(SELECT 1 FROM records WHERE id=?)',[planId]));
   writes.push(prior?guard('version','EXISTS(SELECT 1 FROM records WHERE id=? AND data=?)',[id,prior.data]):guard('version','NOT EXISTS(SELECT 1 FROM records WHERE id=?)',[id]));
   writes.push(db().prepare("INSERT INTO records(id,owner,kind,data,created,assigned_to) VALUES (?,?,'Settings',?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data").bind(id,a.user_id||a.email,JSON.stringify({'MR monthly target':t.target,Month:b.month}),new Date().toISOString(),t.email));
   if(before!==t.target)writes.push(audit(a,'Set MR monthly target','Monthly target',id,{month:b.month,email:t.email,target:before},{month:b.month,email:t.email,target:t.target},'Individual monthly target saved'));

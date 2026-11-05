@@ -208,6 +208,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  identity=bob;await ok(await reports.GET(reportURL()),403);await ok(await reports.POST(request({month:fieldDate.slice(0,7),email:bob.email,target:1000})),403);const bobReport=await ok(await reports.GET(reportURL(bob.email)));assert.equal(bobReport.summary.achieved,0);assert(!bobReport.tables.find(t=>t.title==='Primary sales — linked agencies').columns.includes('PTS'));assert(!JSON.stringify(bobReport).includes('Bob doctor:'));const bobStock=bobReport.tables.find(t=>t.title==='Agency stock reconciliation at month end').rows.find(r=>r[1]==='Product A');assert.equal(bobStock[4],12);assert.equal(bobStock[5],0);assert.equal(bobStock[6],48);
  identity=alice;await ok(await reports.GET(reportURL(alice.email,'2026-13')),400);const selfSummary=await ok(await reports.GET(reportURL(alice.email,fieldDate.slice(0,7),true)));assert.equal(selfSummary.summaries.length,1);assert.equal(selfSummary.summaries[0].target,100000);
  identity=null;await ok(await reports.GET(reportURL()),401);identity=owner;
+ await require('./monthly-earnings-api.cjs')({load,root,sql,request,ok,setIdentity:value=>{identity=value},owner,alice,bob});
  // Month opening/closing and GST exclusion using a previous-month receipt and next-month issue.
  const {buildReport}=load(path.join(root,'lib/monthly-report.ts'));
  const fixtureMember={...profile,stockist_ids:JSON.stringify(['a'])},line={productId:'p',name:'P',qty:10,free:2,scheme:'1',rate:100,subtotal:1000,total:1100,gst:10};
