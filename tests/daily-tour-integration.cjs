@@ -1,0 +1,84 @@
+// Exercise single-date approval through the real authenticated handlers and database adapter.
+const assert=require('node:assert/strict'),path=require('node:path');
+module.exports=async function(c){
+ const {load,root,sql,ok,request,records,fieldDate,owner,alice,bob,r1,r2,r3,who,setClock}=c;
+ const api=load(path.join(root,'app/api/monthly-tour/route.ts')),logic=load(path.join(root,'lib/monthly-tour.ts'));
+ const month=load(path.join(root,'lib/route-insights.ts')).shiftMonth(fieldDate.slice(0,7),3);
+ const originalRecords=new Set(sql.prepare('SELECT id FROM records').all().map(r=>r.id)),originalRequests=new Set(sql.prepare('SELECT id FROM workflow_requests').all().map(r=>r.id));
+ const calendar=()=>{const r=sql.prepare('SELECT data FROM records WHERE id=?').get(logic.calendarID(month));return r?JSON.parse(r.data):logic.emptyCalendar(month)};
+ const read=(date,u=alice)=>{const r=sql.prepare('SELECT data FROM records WHERE id=?').get(logic.dailyProgrammeID(u.email,date));return r?JSON.parse(r.data):null};
+ const readMonth=()=>{const r=sql.prepare('SELECT data FROM records WHERE id=?').get(logic.programmeID(alice.email,month));return r?JSON.parse(r.data):null};
+ const dates=logic.workingDates(month,calendar()),[first,second,third]=dates;
+ const call=(body,status=200)=>api.POST(request(body)).then(r=>ok(r,status));
+ const day=(date=first,ids=[r1.id])=>({date,type:'visit',routes:ids,reason:''});
+ const action=(a,date=first,extra={},status=200,u=alice)=>call({action:a+'-day',email:u.email,month,date,revision:read(date,u)?.revision||0,days:[day(date,u===bob?[r2.id]:[r1.id])],...extra},status);
+ const get=(u=alice)=>api.GET(new Request('https://app.test/api/monthly-tour?month='+month+'&email='+encodeURIComponent(u.email))).then(r=>ok(r));
+ const fullDays=()=>logic.workingDates(month,calendar(),first).map(date=>read(date)?.status==='Approved'?read(date).days[0]:day(date));
+ const monthAction=(action,extra={},status=200)=>call({action,email:alice.email,month,revision:readMonth()?.revision||0,days:fullDays(),...extra},status);
+ who(alice);await action('submit',first,{},409);await action('save',first,{},403,bob);
+ await ok(await api.POST(request({action:'submit-day',month,date:first,days:[day()]},'POST','https://evil.test')),403);
+ who(owner);await call({action:'calendar',month,revision:0,holidays:calendar().holidays,reason:'Publish the daily planning test month'});
+ setClock(first+'T06:00:00Z');who(alice);
+ await action('submit',first,{days:[day(first,[r2.id])]},400);
+ await action('submit',first,{days:[day(first),day(second)]},400);
+ await action('submit',first,{days:[day(second)]},400);
+ await action('save',first,{days:[day(first,[])]});await action('submit',first,{days:[day(first,[])]},400);
+ await action('submit');const pendingRevision=read(first).revision;assert.equal(read(first).status,'Pending');assert.equal(readMonth(),null);
+ assert.equal((await ok(await records.GET())).tourGate.allowed,false);
+ const checklist=load(path.join(root,'lib/closing-checklist.ts')).closingChecklist(month,[],[],[],[],[],sql.prepare('SELECT * FROM records').all().map(r=>({...r,data:JSON.parse(r.data)})));
+ assert(checklist[1].items.some(r=>r.label==='Daily tour plan'&&r.detail.includes(first)));
+ await action('approve',first,{},403);who(bob);await action('withdraw',first,{},403);assert.equal((await get(bob)).dailyProgrammes.length,0);
+ who(owner);await action('reject',first,{reason:'Choose the agreed route'});who(alice);await action('submit');
+ who(owner);await action('approve',first,{revision:pendingRevision},409);await action('approve');await action('approve',first,{},409);
+ who(alice);let output=await ok(await records.GET());assert.equal(output.tourGate.allowed,true);assert.deepEqual(output.tourGate.routeIds,[r1.id]);
+ assert(!output.records.some(r=>r.kind===logic.programmeKind));
+ const tasks=output.records.filter(r=>r.kind==='Tour plan'&&r.data.Date===first&&r.data.Status==='Planned');assert(tasks.length);assert.equal(new Set(tasks.map(r=>r.data['Customer ID'])).size,tasks.length);
+ await action('submit',first,{},409);await ok(await records.DELETE(request({id:logic.dailyProgrammeID(alice.email,first)},'DELETE')),403);
+ setClock(second+'T06:00:00Z');assert.equal((await ok(await records.GET())).tourGate.allowed,false);await action('save',first,{},409);setClock(first+'T06:00:00Z');
+ // Independent dates may be reviewed separately; only that date's approval enables visits.
+ await action('submit',second);await action('withdraw',second);assert.equal(read(second).status,'Draft');await action('submit',second);
+ await monthAction('submit',{},409);who(owner);await action('approve',second);who(alice);
+ const routeChange=await call({action:'request-change',type:'routes',from:first,routes:[r3.id],reason:'Visit the other assigned route'});
+ assert.deepEqual((await ok(await records.GET())).tourGate.routeIds,[r1.id]);
+ await monthAction('submit',{},409);who(owner);await call({action:'approve-change',id:routeChange.id});who(alice);
+ assert.deepEqual((await ok(await records.GET())).tourGate.routeIds,[r3.id]);
+ const swap=await call({action:'request-change',type:'postpone',from:first,to:second,reason:'Swap the two daily appointments'});
+ who(owner);await call({action:'approve-change',id:swap.id});assert.deepEqual(read(first).days[0].routes,[r1.id]);assert.deepEqual(read(second).days[0].routes,[r3.id]);
+ const reportAPI=load(path.join(root,'app/api/monthly-report/route.ts'));
+ let report=await ok(await reportAPI.GET(new Request('https://app.test/api/monthly-report?month='+month+'&mr='+alice.email)));
+ assert(report.tables.find(t=>t.title==='Monthly tour programme').rows.some(r=>r[0]===first&&r[3]==='Daily · Approved'));
+ const swaps=report.tables.find(t=>t.title==='Approved tour changes').rows.filter(r=>r[4]==='Swap the two daily appointments');assert.equal(swaps.length,2);
+ // A leave range may include planned and unplanned dates without requiring a full month.
+ who(alice);const field=load(path.join(root,'app/api/field-planning/route.ts'));
+ await ok(await field.POST(request({action:'leave',from:second,to:third,reason:'Family commitments across both dates'})));
+ const leaveRequest=sql.prepare("SELECT * FROM workflow_requests WHERE kind='leave' AND mr_email=? AND status='Pending'").all(alice.email).find(r=>JSON.parse(r.body).from===second);
+ assert(leaveRequest);who(owner);await ok(await field.POST(request({action:'approve',id:leaveRequest.id})));assert.equal(read(second).days[0].type,'leave');
+ who(alice);setClock(second+'T06:00:00Z');assert.equal((await ok(await records.GET())).tourGate.allowed,false);setClock(first+'T06:00:00Z');
+ const returnToWork=await call({action:'request-change',type:'routes',from:second,routes:[r3.id],reason:'Return to the approved route'});
+ who(owner);await call({action:'approve-change',id:returnToWork.id});who(alice);
+ // A monthly plan adopts approved daily snapshots and history, without silently changing them.
+ await monthAction('save',{days:fullDays().map(d=>d.date===first?{...d,routes:[r3.id]}:d)},409);
+ await monthAction('submit',{days:[read(first).days[0]]},400);
+ await monthAction('submit');assert.equal(readMonth().status,'Pending');assert.equal((await ok(await records.GET())).tourGate.allowed,true);
+ await action('submit',third,{},409);await call({action:'request-change',type:'routes',from:first,routes:[r3.id],reason:'Cannot race a monthly review'},409);
+ who(owner);await monthAction('approve');const adopted=readMonth().history.find(h=>h.id===swap.id);assert.equal(adopted.before.length,2);assert.equal(adopted.after.length,2);
+ output=await ok(await records.GET());const adoptedTasks=output.records.filter(r=>r.kind==='Tour plan'&&r.assigned_to===alice.email&&r.data.Date===first);assert.equal(adoptedTasks.length,new Set(adoptedTasks.map(r=>r.data['Customer ID'])).size);
+ who(alice);await action('submit',third,{},409);const afterMonth=await call({action:'request-change',type:'routes',from:first,routes:[r3.id],reason:'Monthly programme now owns this date'});
+ who(owner);await call({action:'approve-change',id:afterMonth.id});who(alice);assert.deepEqual((await ok(await records.GET())).tourGate.routeIds,[r3.id]);
+ output=await ok(await records.GET());assert(!output.records.some(r=>r.kind==='Tour plan'&&r.assigned_to===alice.email&&r.data.Date===first&&r.data['Route ID']===r1.id&&r.data.Status==='Planned'));
+ // Sunday/holiday approval is sufficient for that one day, still requires the separate holiday request.
+ const sunday=logic.monthDates(month).find(d=>d>=first&&new Date(d+'T12:00:00Z').getUTCDay()===0);
+ who(bob);await action('submit',sunday,{},400,bob);const holiday=await call({action:'request-holiday-work',date:sunday,routes:[r2.id],reason:'Confirmed appointment on Sunday'});
+ who(owner);await call({action:'approve-change',id:holiday.id});who(bob);setClock(sunday+'T06:00:00Z');assert.equal((await ok(await records.GET())).tourGate.allowed,true);setClock(first+'T06:00:00Z');assert.equal((await ok(await records.GET())).tourGate.allowed,false);
+ // Calendar revision, closed period and previous-month protections also apply to individual days.
+ await action('submit',first,{},200,bob);who(owner);await call({action:'calendar',month,revision:calendar().revision,holidays:[...calendar().holidays,{date:dates[5],name:'Additional company holiday'}],reason:'Review the updated festival calendar'});
+ await action('approve',first,{},409,bob);await action('reject',first,{reason:'Review the revised holiday calendar'},200,bob);
+ who(bob);await action('submit',second,{},200,bob);sql.prepare("INSERT INTO period_locks VALUES (?,1,'daily-tour-test',?,?,?)").run(month,new Date().toISOString(),owner.email,'Closed daily plan month');
+ await action('save',third,{},409,bob);who(owner);await action('approve',second,{},409,bob);sql.prepare('DELETE FROM period_locks WHERE month=?').run(month);
+ setClock(logic.monthDates(month).at(-1)+'T06:00:00Z');await action('approve',second,{},409,bob);await action('reject',second,{reason:'Date has passed; submit a new date'},200,bob);
+ setClock(load(path.join(root,'lib/route-insights.ts')).shiftMonth(month,1)+'-01T06:00:00Z');who(alice);await action('save',third,{},409);
+ for(const r of sql.prepare('SELECT id FROM records').all())if(!originalRecords.has(r.id))sql.prepare('DELETE FROM records WHERE id=?').run(r.id);
+ for(const r of sql.prepare('SELECT id FROM workflow_requests').all())if(!originalRequests.has(r.id))sql.prepare('DELETE FROM workflow_requests WHERE id=?').run(r.id);
+ setClock(null);who(alice);
+ console.log('PASS: independent daily approval, scoped permissions and visits, calendar/period guards, changes and leave, daily-to-month adoption, shared history and customer/date deduplication.');
+};

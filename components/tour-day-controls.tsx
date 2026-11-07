@@ -1,0 +1,6 @@
+'use client';
+import type {TourDay} from '../lib/monthly-tour';
+export const dateLabel=(date:string)=>new Date(date+'T12:00:00Z').toLocaleDateString('en-IN',{day:'numeric',month:'short',weekday:'short',timeZone:'Asia/Kolkata'});
+export type Route={id:string;name:string;district?:string};
+export function RouteChoice({routes,value,onChange,disabled=false,label='Routes'}:{routes:Route[];value:string[];onChange:(ids:string[])=>void;disabled?:boolean;label?:string}){return <details className="tour-route-choice"><summary>{value.length?value.map(id=>routes.find(r=>r.id===id)?.name||id).join(', '):label}</summary><div>{routes.map(r=><label key={r.id}><input type="checkbox" disabled={disabled} checked={value.includes(r.id)} onChange={e=>onChange(e.target.checked?[...value,r.id]:value.filter(id=>id!==r.id))}/><span>{r.name}<small>{r.district}</small></span></label>)}{!routes.length&&<p>No routes assigned. Contact Admin.</p>}</div></details>}
+export function DayText({day,routes}:{day:TourDay|undefined;routes:Route[]}){return <>{!day?'Not scheduled':day.type==='leave'?<>Leave{day.reason?' · '+day.reason:''}</>:day.routes.map(id=>routes.find(r=>r.id===id)?.name||day.customers?.find(c=>c.routeId===id)?.routeName||id).join(', ')||'No route selected'}</>}
