@@ -23,7 +23,7 @@ module.exports=async function(c){
  who(bob);await call({action:'cancel-change',id:pending.id},403);const bobView=await get(bob.email);assert(!bobView.requests.some(r=>r.id===pending.id));assert(bobView.calendar.holidays.some(h=>h.date===festival));
  who(owner);await call({action:'approve-change',id:pending.id});await call({action:'approve-change',id:pending.id},409);
  who(alice);overview=await get();assert.equal(overview.holidayWork[0].date,sunday);assert.equal(overview.holidayWork[0].status,'Approved');
- setClock(sunday+'T06:00:00Z');assert.equal((await ok(await records.GET())).tourGate.allowed,false); // Holiday permission alone cannot bypass monthly approval.
+ setClock(sunday+'T06:00:00Z');assert.equal((await ok(await records.GET())).tourGate.allowed,true); // Explicit holiday approval covers this date without requiring the rest of the month.
  setClock(null);const monthDays=logic.workingDates(month,readCal()).map(date=>({date,type:'visit',routes:[r1.id],reason:''}));await call({action:'submit',month,email:alice.email,revision:0,days:monthDays});
  who(owner);await call({action:'approve',month,email:alice.email,revision:programme().revision});
  who(alice);setClock(sunday+'T06:00:00Z');let output=await ok(await records.GET());assert.equal(output.tourGate.allowed,true);assert.deepEqual(output.tourGate.routeIds,[r1.id]);

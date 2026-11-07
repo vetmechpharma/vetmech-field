@@ -102,5 +102,6 @@ module.exports=async function(c){
  // The next route call mirrors fixture state again, so the race fixture doesn't leak.
  who(alice);await ok(await get());
  await require('./monthly-holidays-integration.cjs')(c);
+ await require('./daily-tour-integration.cjs')(c);
  console.log('PASS: monthly tour approval, role/origin ownership, government holiday confirmation, complete working-day coverage, stale-calendar rejection, visit/draft gating, route changes, postponement history, leave attendance, month rollover, protected history, reports and transaction conflict checks.');
 };

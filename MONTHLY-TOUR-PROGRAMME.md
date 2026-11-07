@@ -1,17 +1,17 @@
 # Monthly tour programme
 
-VETMECH Field Force MR App now requires an **Admin-approved monthly route programme before MR visits can be entered or closed**. This replaces the previous permission to record visits without a tour. Start Day and fresh GPS requirements still apply.
+VETMECH Field Force MR App requires an **Admin-approved route plan for the visit date before MR visits can be entered or closed**. MRs can submit either a **Full month** programme or a **Single day** plan. Start Day, fresh GPS and customer-access requirements still apply. See [Daily and monthly tour approval](DAILY-TOUR-APPROVAL.md) for the single-date workflow.
 
 ## Set up before the first field day
 
-1. Admin opens **Tour plan → Monthly tour programme**, selects **Next month** (or any future month), and opens **Company holidays**. No MR selection is needed to publish shared holidays.
+1. Admin opens **Tour plan → Tour programme**, selects **Next month** (or any future month), and opens **Company holidays**. No MR selection is needed to publish shared holidays.
 2. Add each applicable festival or company holiday by date, holiday name and note, then select **Publish holidays for all MRs**. Sundays are automatic holidays. Republic Day, Independence Day and Gandhi Jayanti remain in the shared calendar. Publish before the current month ends so MRs can prepare next month.
-3. MR opens **Tour plan → Monthly tour programme**, chooses the month and assigns one or more accessible routes to each working date. The bulk-fill button repeats selected routes across working days; individual days can then be adjusted. Leave days require a reason.
-4. MR selects **Submit month for approval**. Draft and pending programmes do not permit visits.
+3. MR opens **Tour plan → Tour programme**, chooses **Full month**, selects the month and assigns one or more accessible routes to each working date. The bulk-fill button repeats selected routes across working days; individual days can then be adjusted. Leave days require a reason.
+4. MR selects **Submit month for approval**. Draft and pending programmes do not grant new visit permission. An existing approved daily plan remains valid while the month awaits approval.
 5. Admin opens **Approvals → Tour programme approvals**, reviews every date and approves or rejects with a reason. The MR receives an in-app notification.
 6. After approval, the MR refreshes their workspace, starts the field day and records visits in that day's approved routes.
 
-Future months can be prepared in advance. A first programme created partway through the current month starts from today; earlier attendance and visits remain unchanged. Approval never carries into the next month. Each new month needs its own approved programme.
+Future months can be prepared in advance. A first programme created partway through the current month starts from today; earlier attendance and visits remain unchanged. Approval never carries into the next month. Dates in each new month need an approved daily or monthly plan; an explicitly approved holiday-work request also covers its own date.
 
 ## Shared monthly holiday calendar
 
@@ -25,7 +25,7 @@ Reference sources used for the 2026 Central preset:
 - [DoPT: holiday on 14 April 2026](https://dopt.gov.in/sites/default/files/Declaration%20of%20Holiday%20on%2014.04.2026%20-%20Birthday%20of%20Dr.%20B.R.%20Ambedkar.pdf)
 - [DoPT: Id-ul-Zuha date amendment](https://dopt.gov.in/sites/default/files/Change%20in%20the%20date%20of%20holiday%20of%20Id-ul-Zuha.PDF)
 
-If this month’s holiday calendar changes while a programme or holiday work request is pending, Admin must reject that submission so the MR can review and resubmit. Adding a holiday removes ordinary route tasks for that date from active planned visits. Removing a holiday cancels individual holiday work permissions for that date; a date without an ordinary approved route needs a route-change request. A Sunday remains a holiday even if its festival label is removed. Past dates, closed periods and dates with open visits cannot be changed.
+If this month’s holiday calendar changes while a programme or holiday work request is pending, Admin must reject that submission so the MR can review and resubmit. Adding a holiday removes ordinary route tasks for that date from active planned visits. Removing a holiday cancels individual holiday work permissions for that date; a date without an ordinary approved route needs a daily plan or a route-change request. A Sunday remains a holiday even if its festival label is removed. Past dates, closed periods and dates with open visits cannot be changed.
 
 On upgrade, an already reviewed annual calendar remains usable for current or past months with an existing approved programme. A new month without an approved programme requires explicit monthly publication. Previous annual calendar records and archived monthly reports are retained.
 
@@ -34,8 +34,8 @@ On upgrade, an already reviewed annual calendar remains usable for current or pa
 1. MR chooses the month and selects **Request to work** on a Sunday or another published holiday.
 2. Select one or more accessible routes and provide a reason. This can be done before submitting the monthly programme.
 3. Admin opens **Approvals → Tour programme approvals** and reviews the MR, date, holiday note, original plan and requested routes. Approve or reject; rejection requires a reason.
-4. Approval applies only to that MR and date. The shared holiday remains unchanged for other MRs. The route’s eligible customers appear in planned visits once the monthly programme is also approved.
-5. **Both approvals, Start Day and existing GPS/customer-access requirements apply to visits.** A holiday permission by itself does not unlock a missing, draft or pending monthly programme.
+4. Approval applies only to that MR and date. The shared holiday remains unchanged for other MRs. The route’s eligible customers appear in planned visits after this date-specific approval.
+5. **Holiday-work approval, Start Day and existing GPS/customer-access requirements apply to visits.** A full monthly programme is not required for this explicitly approved holiday date.
 
 An MR can withdraw a pending request. After approval, **Change holiday work** lets the MR request different routes or cancellation. Existing permission stays active until Admin approves that change. Duplicate pending requests for the same MR/date are blocked. Regular date changes and holiday requests can be reviewed independently. Past-date approval, disabled accounts, inaccessible routes and locked periods are rejected. Requests whose dates passed must be rejected and submitted again with new dates.
 
@@ -48,12 +48,12 @@ From an approved programme, select **Request change** on today or a future worki
 | Request | Result after Admin approval |
 | --- | --- |
 | Change routes / return to work | Replaces that date's route selection; approved leave on that date is removed without cancelling the rest of a leave range. |
-| Postpone / swap two dates | Exchanges the route schedules of the original date and a later working date. Both dates must belong to approved programmes. This also works across two approved months. |
+| Postpone / swap two dates | Exchanges the route schedules of the original date and a later working date. Both dates must have an approved daily or monthly route plan. This also works across approved months. |
 | Mark leave | Marks the selected working date or range as approved leave and updates attendance. Sundays and holidays are excluded. |
 
-The MR must provide a reason. Admin sees the original and requested schedules before deciding. **The current approved schedule stays in force while the request is pending.** Only one change request per affected monthly programme can await review at a time. A pending request can be withdrawn by its MR.
+The MR must provide a reason. Admin sees the original and requested schedules before deciding. **The current approved schedule stays in force while the request is pending.** Only one change request per affected programme can await review at a time. Independent daily plans can be reviewed separately. A pending request can be withdrawn by its MR.
 
-The existing Attendance → Apply for leave button sends a tour change request when it overlaps an approved programme. Tour-linked leave is reviewed under Tour programme approvals. A working check-in still counts as a working day on approved leave, but recording visits requires an approved working-route change.
+The existing Attendance → Apply for leave button sends a tour change request when it overlaps an approved monthly programme. For daily-only planning, a normal leave request can cover planned and unplanned dates; approving it updates any affected approved daily plans. Tour-linked leave is reviewed under Tour programme approvals. A working check-in still counts as a working day on approved leave, but recording visits requires an approved working-route change.
 
 Open visits must be closed before a date change can be requested or approved. Past dates cannot be changed; stale requests must be rejected and requested again with future dates. Previous monthly programmes are view-only to MRs. Closed reporting periods also prevent programme changes.
 
@@ -63,8 +63,8 @@ Open visits must be closed before a date change can be requested or approved. Pa
 - Customers can be visited only through today's approved routes. Customer access, availability status, Start Day, same-day closing and GPS checks still apply.
 - Route/date changes preserve the original schedule, reason, reviewer and time. Approved leave or moved schedules remove the affected tasks from active pending visits while retaining history.
 - One completed customer visit counts as monthly coverage. Cancelled or postponed tasks alone do not count as visits.
-- Admin can review all monthly programmes, requests and history. MR reports and PDF exports include the daily programme, approved changes and holiday work decisions alongside customer coverage.
-- Month-closing review includes unresolved monthly tour submissions and change requests.
+- Admin can review all monthly programmes, daily plans, requests and history. MR reports and PDF exports include the daily programme, approved changes and holiday work decisions alongside customer coverage.
+- Month-closing review includes unresolved monthly and daily tour submissions and change requests.
 
 ## Update the existing VPS
 
@@ -75,6 +75,9 @@ sudo bash <<'VETMECH_UPDATE'
 set -Eeuo pipefail
 
 sudo -u vetmech -H git -C /opt/vetmech-field/repository pull --ff-only origin main
+install -o root -g root -m 755 \
+  /opt/vetmech-field/repository/deploy/deploy-from-github.sh \
+  /usr/local/sbin/vetmech-deploy
 
 sudo -u vetmech -H /opt/vetmech-node/bin/node \
   --env-file=/opt/vetmech-field/shared/.env \
