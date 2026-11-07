@@ -81,3 +81,36 @@ or automatic production data seed is provided.
 
 Secrets stay in shared/.env, business data stays in MongoDB, and source history
 stays in GitHub. Maintain backups of each as described in the installation guide.
+
+## Monthly product quantity targets
+
+Under **Reports & targets → Monthly targets**, select an MR and month, then add
+products by name and packing. Enter the target in total units. The server calculates
+each value target as **target units × saved PTS excluding GST** and saves their sum
+as that MR's monthly target. Blank product quantities mean no product target; a
+salary allocation can still be configured. At least ₹1 of product targets is
+required to save a plan.
+
+Approved secondary orders in both supply channels count **paid + free units**.
+Value achievement uses each saved order line's net amount after schemes, excluding
+GST. Quantity and value progress are independent: 10 units targeted at ₹90 PTS
+means ₹900; supplying 10 units with a ₹600 net order completes quantity and leaves
+₹300 value pending. Pending approval and cancelled orders do not count. Existing
+order edit/approval rules determine which saved revision is used.
+
+**Monthly target performance** has month and “Orders up to” controls, an Admin MR
+selector, product progress, CSV export and branded PDF printing. Products with sales
+but no target still show actual units and value with “Not set” targets. Dates filter
+the original order date, using current approval status in an open month. Salary,
+incentive, landing cost and company profit remain Admin-only.
+
+PTS is saved with the plan; later catalogue changes do not silently change targets.
+An Admin can explicitly refresh target PTS and profit costing with a reason, or
+revise quantities, while the month is open. Concurrent plan/price edits are checked
+before saving. Existing value-only plans retain their values until the Admin enters
+quantities and saves a conversion; no historical quantity target is inferred.
+
+New month closures preserve public daily product totals alongside the monthly
+report, so date-filtered reports use the approved snapshot. Older locked archives
+without these totals support month-end reporting only, and missing historical
+quantities are labelled “Not recorded”. Reopening follows the existing Admin workflow.

@@ -1,4 +1,4 @@
-import {productTargetProgress,monthlyEarnings,earningsHistoryKind} from './monthly-earnings';
+import {productTargetProgress,productTargetSnapshot,productTargetStatus,monthlyEarnings,earningsHistoryKind,type ProductProgress} from './monthly-earnings';
 import {secondarySale} from './order-workflow';
 import {programmeForDate,programmeKind,mergeTourHistory,calendarFor,holidayWorkFor,holidayWorkKind,monthDates,dayOff,type Programme,type HolidayWork} from './monthly-tour';
 import {orderStage,orderApproved} from './order-workflow';
@@ -10,12 +10,14 @@ import type {Member} from './permissions';
 export type Row=Record<string,any>;
 export type ReportTable={title:string;columns:string[];rows:(string|number)[][];note?:string;webOnly?:boolean;adminOnly?:boolean};
 export const rupees=(paise:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:2}).format(paise/100);
+export function productProgressTable(progress:ProductProgress[]):ReportTable{return {title:'Product targets and achievement',columns:['Product / packing / status','Target qty','Achieved units','Pending qty','Target value','Achieved value','Pending value'],rows:progress.map(p=>[p.name+(p.packing?' · '+p.packing:'')+'\n'+productTargetStatus(p),p.targetQty==null?'Not set':p.targetQty,p.achievedQty==null?'Not recorded':`${p.achievedQty} (${p.paidQty} paid + ${p.freeQty} free)`,p.pendingQty??'—',p.target==null?'Not set':rupees(p.target),rupees(p.achieved),p.pending==null?'—':rupees(p.pending)]),note:'Units = paid + free quantities on approved secondary orders. Target value = target units × saved PTS excluding GST. Achieved value is the saved order net amount after schemes, excluding GST. Quantity and value targets are assessed independently; pending and cancelled orders are excluded.'};}
 export const owned=(r:Row,m:Member)=>r.assigned_to?r.assigned_to===m.email:!!m.user_id&&r.owner===m.user_id;
-export function totals(m:Member,month:string,records:Row[],invoices:Row[]){
+export function totals(m:Member,month:string,records:Row[],invoices:Row[],through?:string){
  const saved=records.find(r=>r.id===`monthly-target:${m.email}:${month}`),target=Number(saved?.data['MR monthly target']??0)*100;
- const legacy=records.filter(r=>r.kind==='Secondary sales'&&!r.data['Invoice ID']&&owned(r,m)&&(r.data.Date||r.created).startsWith(month));
- const achieved=invoices.filter(i=>secondarySale(i)&&i.mr_email===m.email&&i.date.startsWith(month)).reduce((n,i)=>n+i.subtotal,0)+legacy.reduce((n,r)=>n+Math.round(Number(r.data.Quantity||0)*Number(r.data.Rate||0)*100),0);
- return {productTargets:productTargetProgress(m.email,m.user_id,month,records,invoices),email:m.email,name:m.name,target,achieved,pending:Math.max(0,target-achieved),exceeded:saved?Math.max(0,achieved-target):0,percentage:target?achieved/target*100:0,targetSaved:!!saved};
+ const within=(date:string)=>date.startsWith(month)&&(!through||date.slice(0,10)<=through);
+ const legacy=records.filter(r=>r.kind==='Secondary sales'&&!r.data['Invoice ID']&&owned(r,m)&&within(r.data.Date||r.created));
+ const achieved=invoices.filter(i=>secondarySale(i)&&i.mr_email===m.email&&within(i.date)).reduce((n,i)=>n+i.subtotal,0)+legacy.reduce((n,r)=>n+Math.round(Number(r.data.Quantity||0)*Number(r.data.Rate||0)*100),0);
+ return {productTargets:productTargetProgress(m.email,m.user_id,month,records,invoices,through),email:m.email,name:m.name,target,achieved,pending:Math.max(0,target-achieved),exceeded:saved?Math.max(0,achieved-target):0,percentage:target?achieved/target*100:0,targetSaved:!!saved};
 }
 export function buildReport(m:Member,month:string,records:Row[],invoices:Row[],movements:Row[],benefits:Row[],commitments:Row[],admin:boolean){
  records=records.map(r=>{if(!admin&&r.kind==='Samples'){const data={...r.data};for(const k of ['Unit cost','Sample cost','Cost','Total cost','Rate'])delete data[k];r={...r,data};}if(r.kind!=='Customers')return r;let routeId='';try{routeId=JSON.parse(r.data['MR route access']||'{}')[m.email]}catch{}if(!idList(m.route_ids).includes(routeId))return r;const route=records.find(x=>x.id===routeId);return route?{...r,data:{...r.data,Route:route.data.Name,'Route ID':routeId,District:route.data.District}}:r});
@@ -27,7 +29,7 @@ export function buildReport(m:Member,month:string,records:Row[],invoices:Row[],m
  const pendingOrders=invoices.filter(i=>i.kind==='secondary'&&i.mr_email===m.email&&i.date.startsWith(month)&&i.status&&i.status!=='Delivered');
  const tables:ReportTable[]=[],add=(title:string,columns:string[],rows:(string|number)[][],note?:string)=>tables.push({title,columns,rows,note});
  const progress=productTargetProgress(m.email,m.user_id,month,records,invoices);
- add('Product targets and achievement',['Product','Packing','Target excl. GST','Achieved excl. GST','Achievement','Pending'],progress.map(p=>[p.name,p.packing||'—',p.target===null?'Not set':rupees(p.target),rupees(p.achieved),p.percentage===null?'—':p.percentage.toFixed(1)+'%',p.pending===null?'—':rupees(p.pending)]),'Approved secondary sales from both channels, after schemes and excluding GST. Product targets are specific to this MR and month.');
+ tables.push(productProgressTable(progress));
  if(admin){
   const earnings=monthlyEarnings(m.email,m.user_id,month,records,invoices);
   if(earnings){
@@ -93,5 +95,5 @@ export function buildReport(m:Member,month:string,records:Row[],invoices:Row[],m
  add('Legacy records — retained history',['Type','Date','Details'],legacy.map(r=>[r.kind,r.data.Date||r.created,Object.entries(r.data).map(([k,v])=>`${k}: ${v}`).join(' · ')]),'Legacy secondary sales contribute to achievement, but do not change agency stock. Legacy orders are not counted again as secondary orders.');
  const customers=records.filter(r=>r.kind==='Customers'&&(customerVisible(m,{...r,data:JSON.stringify(r.data)} as any)||admin&&(customerMap.has(r.id)||groups.has(r.id)||groups.has(r.data.Name))));
  add('Customer directory and registration details',['Name','Category','Route','Details'],customers.map(c=>[c.data.Name||'—',c.data['Customer category']||c.data.Type||'Doctor',c.data.Route||'—',Object.entries(c.data).filter(([k])=>!['Name','GPS data','MR route access','Blocked MRs','Outside route MRs'].includes(k)).map(([k,v])=>`${k}: ${v}`).join(' · ')]));
- return {month,generated:new Date().toISOString(),member:{name:m.name,employeeCode:m.employee_code,phone:m.phone,headquarters:m.headquarters,territory:m.territory,routes:idList(m.route_ids).map(name).join(', ')||m.route,districts:idList(m.district_ids).map(name).join(', ')||m.district},summary:totals(m,month,records,invoices),metrics:{visits:visits.length,closedVisits:visits.filter(v=>v.data.Status==='Closed').length,customersVisited:groups.size,repeatVisits:[...groups.values()].reduce((n,v)=>n+Math.max(0,v.length-1),0),orders:secondary.length,primary:primary.reduce((n,i)=>n+i.subtotal,0),workingDays:new Set(period.filter(r=>r.kind==='Attendance'&&r.data.Action==='Check in').map(r=>r.data.Date)).size,...(admin?{benefitCost:benefitPeriod.filter(b=>b.movement==='issue').reduce((n,b)=>n-b.cost,0)}:{})},tables};
+ return {month,productTargetSnapshot:productTargetSnapshot(m.email,m.user_id,month,records,invoices),generated:new Date().toISOString(),member:{name:m.name,employeeCode:m.employee_code,phone:m.phone,headquarters:m.headquarters,territory:m.territory,routes:idList(m.route_ids).map(name).join(', ')||m.route,districts:idList(m.district_ids).map(name).join(', ')||m.district},summary:totals(m,month,records,invoices),metrics:{visits:visits.length,closedVisits:visits.filter(v=>v.data.Status==='Closed').length,customersVisited:groups.size,repeatVisits:[...groups.values()].reduce((n,v)=>n+Math.max(0,v.length-1),0),orders:secondary.length,primary:primary.reduce((n,i)=>n+i.subtotal,0),workingDays:new Set(period.filter(r=>r.kind==='Attendance'&&r.data.Action==='Check in').map(r=>r.data.Date)).size,...(admin?{benefitCost:benefitPeriod.filter(b=>b.movement==='issue').reduce((n,b)=>n-b.cost,0)}:{})},tables};
 }
