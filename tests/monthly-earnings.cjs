@@ -5,9 +5,14 @@ const slabs=[{above:40000000,rateBps:100},{above:50000000,rateBps:200}];
 for(const [sales,rate,amount]of [[39999999,0,0],[40000000,0,0],[40000001,100,400000],[50000000,100,500000],[50000001,200,1000000],[100000000,200,2000000]]){const bonus=e.incentiveFor(sales,slabs);assert.equal(bonus.rateBps,rate);assert.equal(bonus.amount,amount);}
 assert.deepEqual(e.allocateProportionally(2,[1,1,1]),[1,1,0]);assert.deepEqual(e.allocateProportionally(500001,[500000,250000,250000]),[250001,125000,125000]);
 assert.equal(e.percentAmount(101,1250),13);
-const input={target:400000,salaryBudget:45000,products:[{productId:'a',target:200000,salaryPercent:10},{productId:'b',target:200000,salaryPercent:12.5}],slabs:[{above:400000,percent:1},{above:500000,percent:2}]};
-const normalized=e.validateEarningsInput(input);assert.equal(normalized.products.reduce((n,p)=>n+e.percentAmount(p.target,p.salaryBps),0),4500000);
-for(const bad of [{...input,target:400001},{...input,products:[input.products[0],input.products[0]]},{...input,products:[{...input.products[0],target:400000,salaryPercent:101}]},{...input,products:[{...input.products[0],target:400000,salaryPercent:NaN}]},{...input,slabs:[{above:300000,percent:1}]},{...input,slabs:[{above:400000,percent:2},{above:500000,percent:1}]},{...input,slabs:[{above:400000,percent:1},{above:400000,percent:2}]},{...input,target:'400000'},{...input,salaryBudget:1.001}])assert.throws(()=>e.validateEarningsInput(bad));
+const rates=new Map([['a',10000],['b',20000]]);
+const input={salaryBudget:45000,products:[{productId:'a',targetQty:2000,salaryPercent:10},{productId:'b',targetQty:1000,salaryPercent:12.5}],slabs:[{above:400000,percent:1},{above:500000,percent:2}]};
+const normalized=e.validateEarningsInput(input,rates);assert.equal(normalized.target,40000000);assert.equal(normalized.products.reduce((n,p)=>n+e.percentAmount(p.target,p.salaryBps),0),4500000);
+assert.equal(e.validateEarningsInput({...input,target:1,products:input.products.map(p=>({...p,target:1,targetRate:1}))},rates).target,40000000,'Client target/rate overrides cannot alter the derived PTS target');
+for(const bad of [{...input,products:[input.products[0],input.products[0]]},...[-1,0,1.5,'2',undefined,Infinity,1000000001].map(targetQty=>({...input,products:[{...input.products[0],targetQty}]})),{...input,products:[{...input.products[0],salaryPercent:101}]},{...input,products:[{...input.products[0],salaryPercent:NaN}]},{...input,slabs:[{above:300000,percent:1}]},{...input,slabs:[{above:400000,percent:2},{above:500000,percent:1}]},{...input,slabs:[{above:400000,percent:1},{above:400000,percent:2}]},{...input,salaryBudget:1.001},{...input,products:input.products.map(p=>({...p,targetQty:null}))}])assert.throws(()=>e.validateEarningsInput(bad,rates));
+assert.throws(()=>e.validateEarningsInput(input,new Map([['a',null],['b',20000]])),/positive PTS/);
+assert.throws(()=>e.validateEarningsInput(input,new Map([['a',0],['b',20000]])),/positive PTS/);
+const salaryOnly=e.validateEarningsInput({...input,products:[input.products[0],{...input.products[1],targetQty:null}]},rates);assert.equal(salaryOnly.products[1].target,0);assert.equal(salaryOnly.target,20000000);
 const member={email:'a@test',user_id:'a',name:'A',role:'mr',route_ids:'[]',district_ids:'[]',stockist_ids:'[]'};
 const plan={version:1,revision:1,month:'2026-10',mrEmail:member.email,target:100000,salaryBudget:10000,products:[{productId:'p',name:'Same brand',packing:'100 ml',target:100000,salaryBps:1000,pts:7200,cost:4000}],slabs:[{above:100000,rateBps:100}],savedAt:'2026-10-01',savedBy:'admin',reason:'Initial setup'};
 const record={created:'2026-10-01',id:e.earningsID(member.email,plan.month),kind:e.earningsKind,data:plan,assigned_to:member.email};
@@ -44,6 +49,25 @@ const adminReport=buildReport(member,plan.month,[record,target],both,[],[],[],tr
 assert(adminReport.tables.some(t=>t.title==='Product salary allocation'));
 assert(publicReport.tables.some(t=>t.title==='Product targets and achievement'));
 for(const data of [publicReport,mrReport(adminReport)]){assert(!JSON.stringify(data).includes('salaryBps'));assert(!data.tables.some(t=>t.adminOnly||/salary|incentive|profit after/i.test(t.title)));}
-const progress=e.productTargetProgress(member.email,member.user_id,plan.month,[record],both);assert.deepEqual(Object.keys(progress[0]).sort(),['productId','name','packing','target','achieved','pending','percentage'].sort());
+const progress=e.productTargetProgress(member.email,member.user_id,plan.month,[record],both);assert.deepEqual(Object.keys(progress[0]).sort(),['productId','name','packing','target','achieved','pending','percentage','targetQty','achievedQty','paidQty','freeQty','pendingQty','quantityPercentage'].sort());
+// Units and net value remain independent, including free units, custom prices and overachievement.
+const quantityPlan={...record,data:{...plan,version:2,target:90000,products:[{...plan.products[0],target:90000,targetQty:10,targetRate:9000}]}};
+const quantityOrder={...direct,date:'2026-10-02',subtotal:60000,items:[{...line,qty:8,free:2,subtotal:60000}]};
+let q=e.productTargetProgress(member.email,member.user_id,plan.month,[quantityPlan],[quantityOrder])[0];
+assert.equal(q.achievedQty,10);assert.equal(q.paidQty,8);assert.equal(q.freeQty,2);assert.equal(q.pendingQty,0);assert.equal(q.quantityPercentage,100);assert.equal(q.pending,30000);assert.equal(q.target,90000);assert.match(e.productTargetStatus(q),/Qty target complete · Value target pending/);
+assert.equal(e.monthlyEarnings(member.email,member.user_id,plan.month,[quantityPlan],[quantityOrder]).salary,6000,'Salary uses actual net, not target PTS');
+const futureOrder={...quantityOrder,id:'later',date:'2026-10-15'};
+q=e.productTargetProgress(member.email,member.user_id,plan.month,[quantityPlan],[quantityOrder,futureOrder],'2026-10-02')[0];assert.equal(q.achievedQty,10);assert.equal(q.achieved,60000);
+q=e.productTargetProgress(member.email,member.user_id,plan.month,[quantityPlan],[quantityOrder,futureOrder],'2026-10-15')[0];assert.equal(q.achievedQty,20);assert.equal(q.quantityPercentage,200);assert.equal(q.pending,0);assert.equal(q.pendingQty,0);
+q=e.productTargetProgress(member.email,member.user_id,plan.month,[quantityPlan],[{...quantityOrder,items:[{...line,qty:1,free:0,subtotal:100000}]}])[0];assert.equal(q.pendingQty,9);assert.equal(q.pending,0);assert.match(e.productTargetStatus(q),/Qty target pending · Value target complete/);
+q=e.productTargetProgress(member.email,member.user_id,plan.month,[],[quantityOrder])[0];assert.equal(q.target,null);assert.equal(q.targetQty,null);assert.equal(q.pending,null);assert.equal(q.achievedQty,10);assert.equal(q.achieved,60000);
+q=e.productTargetProgress(member.email,member.user_id,plan.month,[record],[quantityOrder])[0];assert.equal(q.targetQty,null,'Legacy monetary targets must not invent quantity goals');assert.equal(q.target,100000);
+assert.equal(e.productTargetProgress(member.email,member.user_id,plan.month,[],[futureOrder],'2026-10-02').length,0);
+const snapshot=e.productTargetSnapshot(member.email,member.user_id,plan.month,[quantityPlan],[quantityOrder,futureOrder]);
+assert.deepEqual(e.snapshotTargetProgress(snapshot,'2026-10-02'),e.productTargetProgress(member.email,member.user_id,plan.month,[quantityPlan],[quantityOrder,futureOrder],'2026-10-02'));
+assert(!/"(?:pts|cost|salaryBps|targetRate|slabs)"/.test(JSON.stringify(snapshot)));
+futureOrder.items=[];assert.equal(e.snapshotTargetProgress(snapshot,'2026-10-31')[0].achievedQty,20,'Snapshot is independent of later live-order changes');
+assert.equal(e.validTargetThrough('2026-11','2026-11-31'),false);assert.equal(e.validTargetThrough('2026-02','2026-02-29'),false);assert.equal(e.validTargetThrough('2028-02','2028-02-29'),true);assert.equal(e.validTargetThrough('2026-11','2026-12-01'),false);
+const csv=load('lib/product-target-export.ts').productTargetCSV([{...q,name:'=UNSAFE()'}],'MR A',plan.month,'2026-10-31');assert(csv.includes('"\'=UNSAFE()"'));assert(csv.includes('"10","8","2"'));assert(csv.includes('"600.00"'));
 for(const kind of [e.earningsKind,e.earningsHistoryKind]){assert(!canRead(member,{...record,kind}));assert(!canWrite(member,{...record,kind}));assert(!canWrite({...member,role:'admin'},{...record,kind}));}
-console.log('PASS: uncapped earnings, strict incentive boundaries, highest slab on total sales, exact allocation, product salary budgets, channel profit, schemes/free units, isolation, frozen cost basis and MR privacy.');
+console.log('PASS: quantity × saved PTS targets, paid + free achievement, independent net value shortfalls, untargeted sales, date cutoffs, frozen public snapshots, safe CSV, legacy plans, salary/incentives and MR privacy.');

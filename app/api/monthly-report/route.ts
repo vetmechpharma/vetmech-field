@@ -1,4 +1,4 @@
-import {earningsID} from '../../../lib/monthly-earnings';
+import {earningsID,validTargetThrough,targetMonthEnd,snapshotTargetProgress} from '../../../lib/monthly-earnings';
 import {audit} from '../../../lib/admin-audit';
 import {guard} from '../../../lib/operations';
 import {expandProgrammes} from '../../../lib/monthly-tour';
@@ -10,11 +10,27 @@ import {buildReport,totals,type Row} from '../../../lib/monthly-report';
 import type {Member} from '../../../lib/permissions';
 const validMonth=(m:string)=>typeof m==='string'&&/^20\d{2}-(0[1-9]|1[0-2])$/.test(m);
 export async function GET(req:Request){try{const viewer=await member(),q=new URL(req.url).searchParams,month=q.get('month')||new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}).slice(0,7);if(!validMonth(month))throw new HttpError(400,'Choose a valid month.');
+ const through=q.get('through')||undefined;
+ if(through&&(!validTargetThrough(month,through)||q.get('summary')!=='1'))throw new HttpError(400,'Choose an up-to date within the selected month for target performance.');
  const email=q.get('mr')||viewer.email;if(viewer.role!=='admin'&&email!==viewer.email)throw new HttpError(403,'You can view only your own report.');
- const closed=await db().prepare('SELECT closure_id,updated FROM period_locks WHERE month=? AND closed=1').bind(month).first<{closure_id:string;updated:string}>();if(closed){const archives=(await db().prepare('SELECT mr_email,report FROM period_reports WHERE closure_id=?').bind(closed.closure_id).all<{mr_email:string;report:string}>()).results.filter(r=>viewer.role==='admin'||r.mr_email===viewer.email);if(q.get('summary')==='1')return json({month,summaries:archives.map(r=>JSON.parse(r.report)[viewer.role].summary),closed:true});const saved=archives.find(r=>r.mr_email===email);if(!saved)throw new HttpError(404,'No archived report for this MR.');const archived=JSON.parse(saved.report)[viewer.role];return json(viewer.role==='admin'?archived:mrReport(archived));}
+ const closed=await db().prepare('SELECT closure_id,updated FROM period_locks WHERE month=? AND closed=1').bind(month).first<{closure_id:string;updated:string}>();
+ if(closed){
+  const archives=(await db().prepare('SELECT mr_email,report FROM period_reports WHERE closure_id=?').bind(closed.closure_id).all<{mr_email:string;report:string}>()).results.filter(r=>viewer.role==='admin'||r.mr_email===viewer.email);
+  if(q.get('summary')==='1'){
+   const summaries=archives.map(r=>{
+    const report=JSON.parse(r.report)[viewer.role],s=report.summary;
+    if(!through)return s;
+    if(!report.productTargetSnapshot){if(through!==targetMonthEnd(month))throw new HttpError(409,'This older locked month has only month-end totals. Choose the final day of the month; historical quantities will not be inferred.');return s;}
+    const productTargets=snapshotTargetProgress(report.productTargetSnapshot,through),achieved=productTargets.reduce((n,p)=>n+p.achieved,0);
+    return {...s,productTargets,achieved,pending:Math.max(0,s.target-achieved),exceeded:s.targetSaved?Math.max(0,achieved-s.target):0,percentage:s.target?achieved/s.target*100:0};
+   });
+   return json({month,through:through||targetMonthEnd(month),summaries,closed:true});
+  }
+  const saved=archives.find(r=>r.mr_email===email);if(!saved)throw new HttpError(404,'No archived report for this MR.');const archived=JSON.parse(saved.report)[viewer.role];return json(viewer.role==='admin'?archived:mrReport(archived));
+ }
  const [rs,is,ms]=await Promise.all([db().prepare('SELECT * FROM records').all<Row>(),db().prepare('SELECT * FROM invoices').all<Row>(),db().prepare("SELECT * FROM members WHERE role='mr'").all<Member>()]);
  const records=expandProgrammes(rs.results.map(r=>({...r,data:JSON.parse(r.data)})) as any),invoices=is.results.map(i=>({...i,items:JSON.parse(i.items)})),reps=ms.results.filter(m=>viewer.role==='admin'||m.email===viewer.email);
- if(q.get('summary')==='1')return json({month,summaries:reps.map(m=>totals(m,month,records,invoices))});
+ if(q.get('summary')==='1')return json({month,through:through||targetMonthEnd(month),summaries:reps.map(m=>totals(m,month,records,invoices,through))});
  const mr=reps.find(m=>m.email===email);if(!mr)throw new HttpError(404,'Choose a representative.');
  const [sm,bm,cm]=await Promise.all([db().prepare('SELECT * FROM stock_movements').all<Row>(),db().prepare('SELECT * FROM benefit_movements WHERE mr_email=?').bind(mr.email).all<Row>(),db().prepare('SELECT * FROM commitments WHERE mr_email=?').bind(mr.email).all<Row>()]);
  const compare=q.get('compare')||shiftMonth(month,-1),inactive=Number(q.get('inactive')||3);if(!validMonth(compare)||![1,2,3,6,12].includes(inactive))throw new HttpError(400,'Choose valid comparison settings.');const report=buildReport(mr,month,records,invoices,sm.results,bm.results,cm.results,viewer.role==='admin');report.tables.push(...routeInsights(mr,month,compare,inactive,records,invoices).tables);return json(viewer.role==='admin'?report:mrReport(report));
