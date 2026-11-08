@@ -91,6 +91,13 @@ as that MR's monthly target. Blank product quantities mean no product target; a
 salary allocation can still be configured. At least ₹1 of product targets is
 required to save a plan.
 
+The MR **Take order** form shows a compact target, achieved and pending quantity
+summary below each selected product, including its packing in the selector. It
+uses the order month and approved paid + free units from the monthly report; draft
+quantities do not increase achievement. Missing targets still show actual units.
+Use the refresh control to reload progress; returning to the window refreshes it
+automatically. Errors display an unavailable state rather than zero achievements.
+
 Approved secondary orders in both supply channels count **paid + free units**.
 Value achievement uses each saved order line's net amount after schemes, excluding
 GST. Quantity and value progress are independent: 10 units targeted at ₹90 PTS
