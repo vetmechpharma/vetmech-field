@@ -2,6 +2,19 @@ type CatalogueRow = {kind: string; data: Record<string, string>};
 export type ProductSort = 'asc' | 'desc';
 const alphabet = new Intl.Collator('en-IN', {sensitivity: 'base', numeric: true});
 
+/** Pack variants are separate products; spelling case and outer spaces are not. */
+export function productIdentity(data: Record<string, string>): string {
+  return JSON.stringify([(data.Name || '').trim().toLowerCase(), (data.Pack || '').trim().toLowerCase()]);
+}
+
+export function productLabel(data: Record<string, string>): string {
+  return [data.Name?.trim(), data.Pack?.trim()].filter(Boolean).join(' · ');
+}
+
+export function catalogueLabel(row: CatalogueRow | undefined, fallback = ''): string {
+  return (row?.kind === 'Products' ? productLabel(row.data) : row?.data.Name) || fallback;
+}
+
 export function productCategory(data: Record<string, string>): string {
   return (data['Product category'] || '').trim().replace(/\s+/g, ' ');
 }
