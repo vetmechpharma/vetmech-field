@@ -1,6 +1,7 @@
 import {earningsKind,earningsHistoryKind} from '../../../lib/monthly-earnings';
 import {customerPhone} from '../../../lib/customer-phone';
 import {customerGPSKind,customerGPSStatements} from '../../../lib/customer-gps-history';
+import {guard} from '../../../lib/operations';
 import {secondarySale} from '../../../lib/order-workflow';
 import {normalizeProductCategory} from '../../../lib/product-catalogue';
 import {normalizeProductPricing,productForMR,productScheme,schemeSlots} from '../../../lib/product-pricing';
@@ -23,6 +24,7 @@ import {quoteProduct,sampleDelta,masterLinks,memberLinks} from '../../../lib/bus
 import {customerCategory,stockistIDs,validateCustomer} from '../../../lib/customers';
 const schema=z.object({draftId:z.string().uuid().optional(),id:z.string().max(100).optional(),kind:z.enum(kinds as [string,...string[]]),assignedTo:z.string().max(200).optional(),data:z.record(z.string().max(100),z.string().max(5000))});
 const attendanceActionSQL="SELECT json_extract(data,'$.Action') FROM records WHERE kind='Attendance' AND json_extract(data,'$.Date')=? AND (assigned_to=? OR (assigned_to='' AND owner=?)) ORDER BY created DESC, rowid DESC LIMIT 1";
+const productMatchSQL="SELECT id FROM records WHERE kind='Products' AND lower(trim(json_extract(data,'$.Name')))=lower(?) AND lower(trim(COALESCE(json_extract(data,'$.Pack'),'')))=lower(?) AND id<>?";
 const numbers=['Quantity','Free quantity','Rate','MRP','PTR','PTS','GST %','Amount','Unit cost','Monthly target','Visit sequence','Scheme paid quantity','Scheme free quantity','Offer rate','Special rate'];
 const balanceSQL="SELECT COALESCE(SUM(CASE WHEN json_extract(data,'$.Movement') = 'Issued to rep' THEN CAST(json_extract(data,'$.Quantity') AS REAL) ELSE -CAST(json_extract(data,'$.Quantity') AS REAL) END),0) FROM records WHERE kind = 'Samples' AND assigned_to = ? AND json_extract(data,'$.Product') = ? AND id <> ?";
 
@@ -95,8 +97,11 @@ export async function POST(req:Request){try{
  for(const k of needed)if(!b.data[k]?.trim())throw new HttpError(400,`${k} is required.`);
  if(masterKinds.includes(b.kind)){
   b.data.Name=b.data.Name.trim();
-  const duplicate=await db().prepare("SELECT id FROM records WHERE kind = ? AND lower(trim(json_extract(data,'$.Name'))) = lower(?) AND id <> ?").bind(b.kind,b.data.Name,b.id||'').first();
-  if(duplicate)throw new HttpError(409,'A record with this name already exists. Edit that record or use a distinct name.');
+  if(b.kind==='Products')b.data.Pack=(b.data.Pack||'').trim();
+  const duplicate=b.kind==='Products'
+   ?await db().prepare(productMatchSQL).bind(b.data.Name,b.data.Pack,b.id||'').first()
+   :await db().prepare("SELECT id FROM records WHERE kind = ? AND lower(trim(json_extract(data,'$.Name'))) = lower(?) AND id <> ?").bind(b.kind,b.data.Name,b.id||'').first();
+  if(duplicate)throw new HttpError(409,b.kind==='Products'?'A product with this name and packing already exists. Edit that product or choose a different packing.':'A record with this name already exists. Edit that record or use a distinct name.');
  }
  if(b.kind==='Stockists'&&(b.data['District IDs']!==undefined||b.data.District)){
   const geography=(await db().prepare('SELECT id,kind,data FROM records').all<{id:string;kind:string;data:string}>()).results.map(r=>({...r,data:JSON.parse(r.data)}));
@@ -191,9 +196,12 @@ export async function POST(req:Request){try{
  }
  const priceChanged=b.kind==='Products'&&old&&Object.keys({...old,...b.data}).some(k=>/PTS|PTR|MRP|rate|GST|Scheme|Price mode|Retail|margin|Landing cost/i.test(k)&&old[k]!==b.data[k]);const auditReason=b.data['Change reason']?.trim()||'';if(priceChanged&&auditReason.length<3)throw new HttpError(400,'Enter a reason for changing product prices or schemes.');delete b.data['Change reason'];
  const gpsHistory=b.kind==='Customers'?customerGPSStatements(id,b.data,existing,m):[];
- const statements=[...gpsHistory,...dates.map(periodGuard),...(m.role==='admin'&&b.kind==='Customers'?[audit(m,existing?'Customer details / assignment updated':'Customer created','Customers',id,existing?{data:old,assignedTo:existing.assigned_to}:null,{data:b.data,assignedTo},auditReason||'Admin customer directory update')]:[]),...(m.role==='admin'&&b.kind==='Products'?[audit(m,existing?'Product catalogue updated':'Product created','Products',id,old,b.data,auditReason||(existing?'Product details updated':'Initial product setup'))]:[]),existing?db().prepare('UPDATE records SET data = ?, assigned_to = ? WHERE id = ?').bind(JSON.stringify(b.data),assignedTo,id):db().prepare('INSERT INTO records (id,owner,kind,data,created,assigned_to) VALUES (?,?,?,?,?,?)').bind(id,m.user_id,b.kind,JSON.stringify(b.data),now,assignedTo)];
+ const productGuards=b.kind==='Products'?[guard('version',`NOT EXISTS(${productMatchSQL})`,[b.data.Name,b.data.Pack,b.id||''])]:[];
+ const statements=[...productGuards,...gpsHistory,...dates.map(periodGuard),...(m.role==='admin'&&b.kind==='Customers'?[audit(m,existing?'Customer details / assignment updated':'Customer created','Customers',id,existing?{data:old,assignedTo:existing.assigned_to}:null,{data:b.data,assignedTo},auditReason||'Admin customer directory update')]:[]),...(m.role==='admin'&&b.kind==='Products'?[audit(m,existing?'Product catalogue updated':'Product created','Products',id,old,b.data,auditReason||(existing?'Product details updated':'Initial product setup'))]:[]),existing?db().prepare('UPDATE records SET data = ?, assigned_to = ? WHERE id = ?').bind(JSON.stringify(b.data),assignedTo,id):db().prepare('INSERT INTO records (id,owner,kind,data,created,assigned_to) VALUES (?,?,?,?,?,?)').bind(id,m.user_id,b.kind,JSON.stringify(b.data),now,assignedTo)];
  const link=masterLinks[b.kind];
- if(link&&old&&old.Name!==b.data.Name){
+ // Product names in saved orders/samples are historical snapshots; their IDs identify the pack.
+ // A name-wide cascade would also rename the other pack sizes of the same brand.
+ if(link&&b.kind!=='Products'&&old&&old.Name!==b.data.Name){
   statements.push(db().prepare(`UPDATE records SET data = json_set(data,?,?) WHERE json_extract(data,?) = ? AND id <> ?`).bind(`$.${link}`,b.data.Name,`$.${link}`,old.Name,id));
   const memberColumn=memberLinks[b.kind];if(memberColumn)statements.push(db().prepare(`UPDATE members SET ${memberColumn} = ? WHERE ${memberColumn} = ?`).bind(b.data.Name,old.Name));
  }

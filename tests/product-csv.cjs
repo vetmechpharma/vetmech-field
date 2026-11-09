@@ -39,3 +39,20 @@ assert.deepEqual(products.filter(p=>catalogue.matchesProductCategory(p.data,'unc
 assert(catalogue.matchesProductCategory({'Product category':'uncategorised'},'category:uncategorised'));assert(!catalogue.matchesProductCategory({'Product category':'uncategorised'},'uncategorised'));
 assert.deepEqual(readCSV(productCSV(products,true)).slice(1).map(p=>p[0]),['Alpha 2','alpha 10','Beta','Zebucal']);
 console.log('PASS: category CSV round-trip, legacy preservation, explicit clearing, length limits, formula safety, MR exports, natural A–Z/Z–A sorting, case-insensitive category grouping and uncategorised filtering.');
+
+// A brand can have multiple independent packs. Imports must never update the first name match.
+const pack50={id:'pack50',kind:'Products',data:{Name:'X-TRAZ (Amitraz)',Pack:'50 ML',MRP:'200',PTR:'120',PTS:'90','Landing cost':'45','Sample cost':'7'}},
+ pack15={id:'pack15',kind:'Products',data:{Name:'X-TRAZ (Amitraz)',Pack:'15 ml',MRP:'100',PTR:'60',PTS:'45','Landing cost':'20','Sample cost':'3'}};
+const variants=previewProducts(productCSV([pack50,pack15],true),[pack15,pack50]);
+assert(variants.every(v=>!v.error));assert.equal(new Set(variants.map(v=>v.id)).size,2);
+for(const v of variants){const original=[pack50,pack15].find(p=>p.id===v.id);assert.equal(v.data.Pack,original.data.Pack);assert.equal(v.data['Landing cost'],original.data['Landing cost']);assert.equal(v.data['Sample cost'],original.data['Sample cost']);}
+const packImport=(name,pack)=>[name,pack,'100','60','45','5+1'];
+const newVariant=previewProducts(writeCSV([legacyProductHeaders,packImport('X-TRAZ (Amitraz)','15 ml')]),[pack50])[0];
+assert.equal(newVariant.error,'');assert.equal(newVariant.id,undefined);assert.equal(newVariant.data['Sample cost'],undefined);assert.notEqual(newVariant.data['Landing cost'],'45');
+const bothNew=previewProducts(writeCSV([legacyProductHeaders,packImport('X-TRAZ (Amitraz)','50 ML'),packImport('X-TRAZ (Amitraz)','15 ml')]),[]);assert(bothNew.every(v=>!v.error&&!v.id));
+const samePack=previewProducts(writeCSV([legacyProductHeaders,packImport('X-TRAZ (Amitraz)','15 ml'),packImport(' x-traz (amitraz) ',' 15 ML ')]),[]);assert.match(samePack[1].error,/Duplicate product name and packing/);
+const matched=previewProducts(writeCSV([legacyProductHeaders,packImport(' x-traz (amitraz) ',' 15 ML ')]),[pack50,pack15])[0];assert.equal(matched.id,'pack15');assert.equal(matched.data['Sample cost'],'3');
+assert.match(previewProducts(productCSV([pack15],true),[pack15,{...pack15,id:'duplicate'}])[0].error,/Multiple catalogue matches/);
+assert.equal(catalogue.productIdentity({Name:'Legacy'}),catalogue.productIdentity({Name:' legacy ',Pack:' '}));
+assert.equal(catalogue.productLabel(pack15.data),'X-TRAZ (Amitraz) · 15 ml');assert.equal(catalogue.catalogueLabel(pack50),'X-TRAZ (Amitraz) · 50 ML');assert.equal(catalogue.catalogueLabel({kind:'Customers',data:{Name:'Doctor',Pack:'Not a product'}}),'Doctor');
+console.log('PASS: same-brand pack variants import/export separately, exact-pack updates preserve private costs, new packs do not inherit another pack’s data, and duplicate name+pack pairs are rejected.');

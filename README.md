@@ -82,6 +82,17 @@ or automatic production data seed is provided.
 Secrets stay in shared/.env, business data stays in MongoDB, and source history
 stays in GitHub. Maintain backups of each as described in the installation guide.
 
+## Product pack variants
+
+Products are matched by **name and packing together**, ignoring case and surrounding
+spaces. For example, `X-TRAZ (Amitraz) · 50 ML` and `X-TRAZ (Amitraz) · 15 ml` are
+separate products, with their own IDs, prices, targets and stock balances. An exact
+name-and-pack duplicate is rejected on create or edit, including concurrent saves.
+CSV imports use the same pair to decide whether to create or update a product.
+To correct an existing product's packing, edit that product rather than importing
+another pack. Existing orders keep their recorded name, packing and prices.
+No database migration or product deletion is needed for this update.
+
 ## Monthly product quantity targets
 
 Under **Reports & targets → Monthly targets**, select an MR and month, then add

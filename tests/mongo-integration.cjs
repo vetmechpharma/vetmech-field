@@ -24,7 +24,7 @@ async function sessionHeaders(){
 }
 const database={prepare(query){let args=[];return {bind(...values){args=values;return this},async first(){return sql.prepare(query).get(...args)||null},async all(){return {results:sql.prepare(query).all(...args)}},async run(){return sql.prepare(query).run(...args)}}},async batch(statements){sql.exec('BEGIN');try{const results=[];for(const statement of statements)results.push(await statement.run());sql.exec('COMMIT');return results}catch(e){sql.exec('ROLLBACK');throw e}}};
 const cache=new Map();
-function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file).exports;const m={exports:{}};cache.set(file,m);const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;function localRequire(name){if(name==='cloudflare:workers')throw Error('Cloudflare dependency remains');if(name==='next/headers')return {headers:async()=>sessionHeaders()};if(name==='next/navigation')return {redirect(){throw new Error('Unexpected redirect')}};if(name.endsWith('.json'))return require(path.resolve(path.dirname(file),name));if(name.startsWith('.')){const p=path.resolve(path.dirname(file),name);return load(p.endsWith('.ts')?p:p+'.ts')}return require(name)}new Function('require','module','exports',code)(localRequire,m,m.exports);if(file.endsWith('/route.ts'))for(const key of Object.keys(m.exports)){const handler=m.exports[key];if(typeof handler==='function')m.exports[key]=async(...args)=>{await pushFixtures();try{return await handler(...args)}finally{await pullResults()}}}return m.exports}
+function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file).exports;const m={exports:{}};cache.set(file,m);const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;function localRequire(name){if(name==='cloudflare:workers')throw Error('Cloudflare dependency remains');if(name==='next/headers')return {headers:async()=>sessionHeaders()};if(name==='next/navigation')return {redirect(){throw new Error('Unexpected redirect')}};if(name.endsWith('.json'))return require(path.resolve(path.dirname(file),name));if(name.startsWith('.')){const p=path.resolve(path.dirname(file),name);return load(p.endsWith('.ts')?p:p+'.ts')}return require(name)}new Function('require','module','exports',code)(localRequire,m,m.exports);if(file.endsWith('/route.ts'))for(const key of Object.keys(m.exports)){const handler=m.exports[key];if(typeof handler==='function'){m.exports[key]=async(...args)=>{await pushFixtures();try{return await handler(...args)}finally{await pullResults()}};m.exports[key].unwrapped=handler;}}return m.exports}
 let mongo,replset,testClient;
 async function startMongo(){
  if(process.env.MONGO_TEST_MODE==='model'){
@@ -150,6 +150,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  const commerce=load(path.join(root,'app/api/commerce/route.ts')),benefits=load(path.join(root,'app/api/benefits/route.ts')),closeVisit=load(path.join(root,'app/api/visits/close/route.ts')),whatsapp=load(path.join(root,'app/api/whatsapp/route.ts'));
  const invoice=(kind,stockistId,lines,extra={})=>{const quotes=kind==='secondary'?[]:lines.map(l=>load(path.join(root,'lib/field-rules.ts')).priceLine(JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(l.productId).data),l.productId,l.qty,l.scheme||'none',true));return {id:crypto.randomUUID(),kind,stockistId,date:fieldDate,...(kind!=='secondary'?{invoiceValue:quotes.reduce((n,l)=>n+l.subtotal,0)/100}:{}),lines:lines.map((l,i)=>kind==='secondary'?l:{...l,freeQty:quotes[i].free,batch:'TEST-BATCH',expiry:'2035-12-31'}),...extra}};
  const qty=(stock,prod)=>sql.prepare('SELECT quantity FROM stock_balances WHERE stockist_id=? AND product_id=?').get(stock,prod)?.quantity||0;
+ await require('./product-packing-integration.cjs')({sql,ok,request,records,commerce,invoice,qty,s1,shared,owner,alice,who:u=>{identity=u}});
  await ok(await commerce.POST(request(invoice('primary',s1.id,[{productId:product.id,qty:50,scheme:'1'}]))),403);
  identity=owner;
  const primary=invoice('primary',s1.id,[{productId:product.id,qty:50,scheme:'1'},{productId:otherProduct.id,qty:10,scheme:'none'}]);await ok(await commerce.POST(request(primary)));assert.equal(qty(s1.id,product.id),60);assert.equal(qty(s1.id,otherProduct.id),10);
@@ -860,6 +861,17 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
   assert.equal(await mongo.collection('stock_movements').countDocuments({stockist_id:'race'}),2);
   assert.equal((await mongo.collection('stock_balances').findOne({id:'race|p'})).quantity,-4);
   console.log('PASS: real replica-set concurrent approximate deductions both commit without lost updates or a stock-shortage gate.');
+  // Invoke actual handlers without overlapping fixture resets, so both requests race in MongoDB.
+  const previousIdentity=identity;identity=owner;await pushFixtures();
+  try{
+   const createPack=(Name,Pack)=>records.POST.unwrapped(request({kind:'Products',data:{Name,Pack,MRP:'100',PTR:'60',PTS:'45'}}));
+   const duplicatePair=await Promise.all([createPack('Concurrent pack test','15 ml'),createPack(' concurrent pack test ','15 ML ')]);
+   assert.deepEqual(duplicatePair.map(r=>r.status).sort(),[200,409]);
+   const distinctPacks=await Promise.all([createPack('Concurrent variants','15 ml'),createPack('Concurrent variants','50 ML')]);
+   assert.deepEqual(distinctPacks.map(r=>r.status),[200,200]);
+   console.log('PASS: concurrent product API requests reject a duplicate name+pack while allowing different pack sizes under the same brand.');
+  }finally{await pullResults();identity=previousIdentity;}
+
  }
 
 
