@@ -34,9 +34,8 @@ module.exports=async function(c){
  who(owner);
  const futureHoliday=logic.workingDates(month,calendar(),fieldDate)[4];
  await call({action:'calendar',month,revision:calendar().revision,holidays:[...calendar().holidays,{date:futureHoliday,name:'Local government holiday'}],reason:'Regional notification confirmed'});
- await monthAct('approve',{},409); // An intervening holiday requires resubmission.
- await monthAct('reject',{reason:'Review the newly confirmed regional holiday'});
- who(alice);await monthAct('submit',{days:daysFor()});who(owner);await monthAct('approve');
+ assert.equal(read().status,'Pending');assert(!read().days.some(d=>d.date===futureHoliday));assert.equal(read().calendarRevision,calendar().revision);
+ await monthAct('approve'); // The new holiday is excluded without resubmitting unrelated dates.
  assert.equal(read().status,'Approved');await monthAct('approve',{},409);
  who(alice);let output=await ok(await records.GET());assert(output.tourGate.allowed);assert.deepEqual(output.tourGate.routeIds,[r1.id]);
  assert(!output.records.some(r=>['Tour programme','Tour calendar'].includes(r.kind)));
@@ -103,5 +102,6 @@ module.exports=async function(c){
  who(alice);await ok(await get());
  await require('./monthly-holidays-integration.cjs')(c);
  await require('./daily-tour-integration.cjs')(c);
- console.log('PASS: monthly tour approval, role/origin ownership, government holiday confirmation, complete working-day coverage, stale-calendar rejection, visit/draft gating, route changes, postponement history, leave attendance, month rollover, protected history, reports and transaction conflict checks.');
+ await require('./tour-holiday-changes-integration.cjs')(c);
+ console.log('PASS: monthly tour approval, role/origin ownership, government holiday confirmation, complete working-day coverage, holiday reconciliation, visit/draft gating, route changes, postponement history, leave attendance, month rollover, protected history, reports and transaction conflict checks.');
 };

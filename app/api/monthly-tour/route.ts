@@ -6,6 +6,7 @@ import {assertOpen,periodGuard,stateSQL} from '../../../lib/periods';
 import {audit} from '../../../lib/admin-audit';
 import {monthDates,workingDates,validTourDate,dayOff,programmeID,programmeKey,programmeForDate,dailyProgrammeFor,sameTourDay,mergeTourHistory,calendarID,nationalHolidays,holidayWorkID,holidayWorkKind,type HolidayWork,type Programme,type TourDay,type HolidayCalendar} from '../../../lib/monthly-tour';
 import {tourSnapshot,calendarFrom,programmeFrom,routesFor,snapshotDay,leaveSyncStatements,programmeKind,calendarKind} from '../../../lib/monthly-tour-server';
+import {programmeAfterCalendar} from '../../../lib/tour-calendar-update';
 const monthSchema=z.string().regex(/^20\d\d-(0[1-9]|1[0-2])$/);
 const daySchema=z.object({date:z.string().refine(validTourDate),type:z.enum(['visit','leave']),routes:z.array(z.string().min(1).max(100)).max(20),reason:z.string().trim().max(1000).default('')});
 const reasonSchema=z.string().trim().min(3).max(1000);
@@ -14,9 +15,10 @@ async function ownerFor(m:Member,email:unknown){if(m.role!=='admin'){if(email&&e
 export async function GET(req:Request){try{
  const m=await member(),q=new URL(req.url).searchParams,month=parse(monthSchema,q.get('month')||indiaDay().slice(0,7),'Select a valid month.'),{rows}=await tourSnapshot(),email=q.get('email');
  const owner=m.role==='admin'&&!email?null:await ownerFor(m,email),calendar=calendarFrom(rows,month);
+ const periodClosed=!!await db().prepare('SELECT month FROM period_locks WHERE closed=1 AND month>=? LIMIT 1').bind(month).first();
  const programmes=rows.filter(r=>r.kind===programmeKind&&(m.role==='admin'||r.assigned_to===m.email)&&(!owner||r.assigned_to===owner.email)&&((r.data as unknown as Programme).month===month||q.get('review')==='1'&&(r.data as unknown as Programme).status==='Pending'));
  const requests=(await db().prepare("SELECT * FROM workflow_requests WHERE kind='tour_change' ORDER BY created DESC").all<any>()).results.filter(r=>(m.role==='admin'||r.mr_email===m.email)&&(!owner||r.mr_email===owner.email)).map(r=>({...r,body:JSON.parse(r.body)})).filter(r=>r.body.programmes?.some((p:any)=>p.month===month)||q.get('review')==='1'&&r.status==='Pending');
- return json({calendar,holidayWork:rows.filter(r=>r.kind===holidayWorkKind&&(m.role==='admin'||r.assigned_to===m.email)&&(!owner||r.assigned_to===owner.email)&&r.data.date.startsWith(month)).map(r=>({...r.data,email:r.assigned_to})),programme:owner?programmeFrom(rows,owner.email,month):null,dailyProgrammes:owner?programmes.filter(r=>(r.data as unknown as Programme).scope==='day').map(r=>r.data).sort((a,b)=>a.startsOn.localeCompare(b.startsOn)):[],programmes,requests,routes:owner?routesFor(owner,rows).map(r=>({id:r.id,name:r.data.Name,district:r.data.District})):[],leave:owner?rows.filter(r=>r.kind==='Leave'&&r.assigned_to===owner.email&&r.data.Status==='Approved'):[],today:indiaDay()});
+ return json({calendar,periodClosed,holidayWork:rows.filter(r=>r.kind===holidayWorkKind&&(m.role==='admin'||r.assigned_to===m.email)&&(!owner||r.assigned_to===owner.email)&&r.data.date.startsWith(month)).map(r=>({...r.data,email:r.assigned_to})),programme:owner?programmeFrom(rows,owner.email,month):null,dailyProgrammes:owner?programmes.filter(r=>(r.data as unknown as Programme).scope==='day').map(r=>r.data).sort((a,b)=>a.startsOn.localeCompare(b.startsOn)):[],programmes,requests,routes:owner?routesFor(owner,rows).map(r=>({id:r.id,name:r.data.Name,district:r.data.District})):[],leave:owner?rows.filter(r=>r.kind==='Leave'&&r.assigned_to===owner.email&&r.data.Status==='Approved'):[],today:indiaDay()});
 }catch(e){return failure(e)}}
 export async function POST(req:Request){try{
  sameOrigin(req);const m=await member(),b=await readJSON(req,256*1024) as any,now=new Date().toISOString(),today=indiaDay(),{rows,stamp}=await tourSnapshot(),statements=[guard('version',`(${stateSQL})=?`,[stamp])];
@@ -27,17 +29,35 @@ export async function POST(req:Request){try{
  const checkDay=(d:TourDay,calendar:HolidayCalendar,complete=true)=>{if(dayOff(d.date,calendar))throw new HttpError(400,`${d.date}: Sundays and government holidays cannot be planned for visits or leave.`);if(d.type==='leave'&&d.reason.length<3)throw new HttpError(400,`Enter a leave reason for ${d.date}.`);if(complete&&d.type==='visit'&&!d.routes.length)throw new HttpError(400,`Choose a route for ${d.date}.`);if(new Set(d.routes).size!==d.routes.length)throw new HttpError(400,'Select each route only once.');};
  const checkOpenVisits=(email:string,dates:string[])=>{if(rows.some(r=>r.kind==='Visits'&&r.assigned_to===email&&dates.includes(r.data.Date)&&r.data.Status!=='Closed'))throw new HttpError(409,'Close the open visit before changing that day’s schedule.');};
  if(b.action==='calendar'){
-  if(m.role!=='admin')throw new HttpError(403,'Only Admin can maintain holidays.');const month=parse(monthSchema,b.month,'Choose a valid month.'),year=month.slice(0,4),old=calendarFrom(rows,month);await freshMonth(month);if(b.revision!==old.revision)throw new HttpError(409,'Holiday calendar changed. Refresh before saving.');
+  if(m.role!=='admin')throw new HttpError(403,'Only Admin can maintain holidays.');const month=parse(monthSchema,b.month,'Choose a valid month.'),year=month.slice(0,4),old=calendarFrom(rows,month);await assertOpen(month);if(b.revision!==old.revision)throw new HttpError(409,'Holiday calendar changed. Refresh before saving.');
   const holidays=parse(z.array(z.object({date:z.string().refine(validTourDate),name:z.string().trim().min(2).max(120),note:z.string().trim().max(500).default('')})).max(31),b.holidays,'Enter valid holiday dates, names and notes.');if(holidays.some(h=>!h.date.startsWith(month+'-'))||new Set(holidays.map(h=>h.date)).size!==holidays.length)throw new HttpError(400,'Use unique dates within the selected month.');
   for(const national of nationalHolidays(year).filter(h=>h.date.startsWith(month)))if(!holidays.some(h=>h.date===national.date))throw new HttpError(400,'National holidays must remain in the shared calendar.');
   const reason=parse(reasonSchema,b.reason,'Enter a reason for publishing or changing holidays.');
   const changed=[...new Set([...holidays,...old.holidays].map(h=>h.date))].filter(d=>{const a=holidays.find(h=>h.date===d),c=old.holidays.find(h=>h.date===d);return a?.name!==c?.name||(a?.note||'')!==(c?.note||'')});
-  if(changed.some(d=>d<today))throw new HttpError(409,'Past holiday dates cannot be changed.');
-  if(rows.some(r=>r.kind==='Visits'&&r.data.Status!=='Closed'&&changed.includes(r.data.Date)))throw new HttpError(409,'Close open visits before changing holidays on that date.');
   const next:HolidayCalendar={year,month,name:String(b.name||'Company holiday calendar').slice(0,100),source:String(b.source||'').slice(0,1000),holidays:holidays.sort((a,b)=>a.date.localeCompare(b.date)),confirmed:true,revision:old.revision+1};
+  const added=changed.filter(date=>!dayOff(date,old)&&!!dayOff(date,next));
+  if(rows.some(r=>r.kind==='Visits'&&r.data.Status!=='Closed'&&changed.includes(r.data.Date)))throw new HttpError(409,'Close open visits before changing holidays on that date. Recorded work will be preserved.');
+  const change={id:crypto.randomUUID(),reason,at:now,actor:m.email};
+  for(const row of rows.filter(r=>r.kind===programmeKind&&(r.data as unknown as Programme).month===month)){
+   const before=row.data as unknown as Programme,updated=programmeAfterCalendar(before,next,change);if(!updated)continue;
+   statements.push(db().prepare('UPDATE records SET data=? WHERE id=?').bind(JSON.stringify(updated),row.id),audit(m,'Tour plan adjusted for holidays','Tour plan',row.id,before,updated,reason));
+   if(before.status!==updated.status)statements.push(notification(row.assigned_to,updated.scope==='day'?'Daily plan changed to holiday':'Tour programme needs review',updated.reason||reason,'Tour plan',row.id));
+  }
+  const pending=(await db().prepare("SELECT * FROM workflow_requests WHERE kind='tour_change' AND status='Pending'").all<any>()).results;
+  for(const request of pending){
+   const body=JSON.parse(request.body);
+   const affected=body.type==='holiday_work'?changed.includes(body.from):body.programmes?.some((p:any)=>p.after.some((d:TourDay)=>added.includes(d.date)));
+   if(affected){
+    const reviewReason='Admin changed the company holiday calendar. Review the date and submit a new request if needed. '+reason;
+    statements.push(db().prepare('UPDATE workflow_requests SET status=?,reason=?,reviewed=? WHERE id=?').bind('Rejected',reviewReason,now,request.id),notification(request.mr_email,'Tour change needs review',reviewReason,'Tour plan',request.id),audit(m,'Tour change rejected after holiday update','Tour plan',request.id,body,{status:'Rejected'},reviewReason));
+   }else if(body.type==='holiday_work'&&body.from.startsWith(month+'-')&&body.calendarRevision===old.revision){
+    // An unrelated date change must not invalidate this MR's holiday-work request.
+    statements.push(db().prepare('UPDATE workflow_requests SET body=? WHERE id=?').bind(JSON.stringify({...body,calendarRevision:next.revision}),request.id));
+   }
+  }
   for(const row of rows.filter(r=>r.kind===holidayWorkKind)){const work=row.data as unknown as HolidayWork;if(work.status!=='Approved'||!changed.includes(work.date)||dayOff(work.date,next))continue;const cancellation={...work,status:'Cancelled',revision:work.revision+1,approvedBy:m.email,approvedAt:now,reason:'Holiday removed from the shared calendar: '+reason,history:[...(work.history||[]),{id:crypto.randomUUID(),action:'holiday removed',reason,at:now,actor:m.email,before:[{date:work.date,type:work.type,routes:work.routes,reason:work.reason,customers:work.customers}],after:[]}]};statements.push(db().prepare('UPDATE records SET data=? WHERE id=?').bind(JSON.stringify(cancellation),row.id));}
   statements.push(periodGuard(month),db().prepare("INSERT INTO records(id,owner,kind,data,created,assigned_to) VALUES (?,?,'Tour calendar',?,?,'') ON CONFLICT(id) DO UPDATE SET data=excluded.data").bind(calendarID(month),m.user_id||m.email,JSON.stringify(next),now),audit(m,'Monthly holidays published','Tour plan',calendarID(month),old,next,reason));
-  const reps=(await db().prepare("SELECT email FROM members WHERE role='mr' AND status='active'").all<{email:string}>()).results;for(const rep of reps)statements.push(notification(rep.email,'Monthly holidays published',`${month} · Review holidays and prepare your tour programme.`,'Tour plan',calendarID(month)));
+  const reps=(await db().prepare("SELECT email FROM members WHERE role='mr' AND status='active'").all<{email:string}>()).results;for(const rep of reps)statements.push(notification(rep.email,'Monthly holidays published',`${month} · Company holidays updated for all MRs. Submitted plans now follow this calendar; recorded work is preserved.`,'Tour plan',calendarID(month)));
   await db().batch(statements);return json({ok:true});
  }
  if(b.action==='request-holiday-work'){
