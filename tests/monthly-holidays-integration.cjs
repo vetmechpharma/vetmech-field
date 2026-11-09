@@ -18,7 +18,7 @@ module.exports=async function(c){
  await publish({holidays:[...readCal().holidays,readCal().holidays.at(-1)]},400);
  who(alice);let overview=await get();assert(overview.calendar.confirmed);assert(overview.calendar.holidays.some(h=>h.note.includes('every MR')));assert.equal(overview.programme,null);
  await work(festival,{routes:[r2.id]},400);const rejected=await work(festival);who(owner);await call({action:'reject-change',id:rejected.id,reason:'Observe the company holiday'});who(alice);assert.equal((await get()).holidayWork.length,0);
- const stale=await work(festival);who(owner);await publish({holidays:readCal().holidays.map(h=>h.date===festival?{...h,note:'Updated holiday notice'}:h)});await call({action:'approve-change',id:stale.id},409);await call({action:'reject-change',id:stale.id,reason:'Please review the updated notice'});
+ const stale=await work(festival);who(owner);await publish({holidays:readCal().holidays.map(h=>h.date===festival?{...h,note:'Updated holiday notice'}:h)});await call({action:'approve-change',id:stale.id},409);assert.equal(sql.prepare('SELECT status FROM workflow_requests WHERE id=?').get(stale.id).status,'Rejected');
  who(alice);const pending=await work();await work(sunday,{},409);await call({action:'approve-change',id:pending.id},403);
  who(bob);await call({action:'cancel-change',id:pending.id},403);const bobView=await get(bob.email);assert(!bobView.requests.some(r=>r.id===pending.id));assert(bobView.calendar.holidays.some(h=>h.date===festival));
  who(owner);await call({action:'approve-change',id:pending.id});await call({action:'approve-change',id:pending.id},409);

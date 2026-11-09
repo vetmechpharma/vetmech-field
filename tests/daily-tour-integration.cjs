@@ -72,7 +72,7 @@ module.exports=async function(c){
  who(owner);await call({action:'approve-change',id:holiday.id});who(bob);setClock(sunday+'T06:00:00Z');assert.equal((await ok(await records.GET())).tourGate.allowed,true);setClock(first+'T06:00:00Z');assert.equal((await ok(await records.GET())).tourGate.allowed,false);
  // Calendar revision, closed period and previous-month protections also apply to individual days.
  await action('submit',first,{},200,bob);who(owner);await call({action:'calendar',month,revision:calendar().revision,holidays:[...calendar().holidays,{date:dates[5],name:'Additional company holiday'}],reason:'Review the updated festival calendar'});
- await action('approve',first,{},409,bob);await action('reject',first,{reason:'Review the revised holiday calendar'},200,bob);
+ await action('approve',first,{},200,bob); // A different date's holiday does not invalidate this submission.
  who(bob);await action('submit',second,{},200,bob);sql.prepare("INSERT INTO period_locks VALUES (?,1,'daily-tour-test',?,?,?)").run(month,new Date().toISOString(),owner.email,'Closed daily plan month');
  await action('save',third,{},409,bob);who(owner);await action('approve',second,{},409,bob);sql.prepare('DELETE FROM period_locks WHERE month=?').run(month);
  setClock(logic.monthDates(month).at(-1)+'T06:00:00Z');await action('approve',second,{},409,bob);await action('reject',second,{reason:'Date has passed; submit a new date'},200,bob);
