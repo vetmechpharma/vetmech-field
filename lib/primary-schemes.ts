@@ -1,4 +1,4 @@
-import {productScheme, type ProductData} from './product-pricing';
+import {productScheme,DIRECT_NET_SCHEME, type ProductData} from './product-pricing';
 
 export type RetailReferences = {retailSchemeIds?: string[]; retailSchemes?: string[]; retailScheme?: string};
 
@@ -15,7 +15,7 @@ export function primaryRetailReferences(product: ProductData, input: RetailRefer
   const labels = ids.map(id => {
     const previous = saved?.retailSchemeIds?.indexOf(id) ?? -1;
     if (previous >= 0 && saved?.retailSchemes?.[previous]) return saved.retailSchemes[previous];
-    return productScheme(product, id).label;
+    const scheme=productScheme(product,id);if(scheme.type===DIRECT_NET_SCHEME)throw new Error('Direct company net-rate offers cannot be used as stockist retail schemes.');return scheme.label;
   });
   return {retailSchemeIds: [...ids], retailSchemes: labels, retailScheme: labels.join(' / ')};
 }

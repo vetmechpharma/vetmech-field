@@ -1,5 +1,5 @@
 'use client';
-import {schemeLabel, schemeSlots, type ProductData} from '../lib/product-pricing';
+import {schemeLabel, schemeSlots, DIRECT_NET_SCHEME, type ProductData} from '../lib/product-pricing';
 import type {RetailReferences} from '../lib/primary-schemes';
 
 export function PrimaryRetailSchemes({product, value, saved, onChange}: {
@@ -7,7 +7,7 @@ export function PrimaryRetailSchemes({product, value, saved, onChange}: {
 }) {
   const ids = value.retailSchemeIds ?? [];
   const legacy = (value.retailSchemes ?? [value.retailScheme || '']).filter(Boolean);
-  const available = product ? schemeSlots.filter(i => product[`Scheme ${i} enabled`] === 'Yes').map(String) : [];
+  const available = product ? schemeSlots.filter(i => product[`Scheme ${i} enabled`] === 'Yes' && product[`Scheme ${i} type`] !== DIRECT_NET_SCHEME).map(String) : [];
   const options = [...new Set([...available, ...(saved?.retailSchemeIds || [])])];
   return <fieldset className="primary-retail-schemes">
     <legend>Retail schemes for MR</legend>

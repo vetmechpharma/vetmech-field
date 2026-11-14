@@ -72,11 +72,24 @@ export function productForMR(data: ProductData) {
   return copy;
 }
 
-export type ProductScheme = {type: 'Buy + free' | 'Discount'; paid: number; free: number; discount: number; label: string};
+export const DIRECT_NET_SCHEME = 'Direct net rate';
+export function isDirectNetScheme(data: ProductData, slot: string | number, saved?: {scheme: string; schemeType?: string}) {
+  if (slot === 'none' || slot === 'other') return false;
+  if (saved?.scheme === String(slot)) return saved.schemeType === DIRECT_NET_SCHEME;
+  return data[`Scheme ${slot} type`] === DIRECT_NET_SCHEME;
+}
+export type ProductScheme = {type: 'Buy + free' | 'Discount' | typeof DIRECT_NET_SCHEME; paid: number; free: number; discount: number; label: string; minimumQty?: number; netRate?: number};
 export function productScheme(data: ProductData, slot: number | string): ProductScheme {
   if (slot === 'none') return {type: 'Buy + free', paid: 1, free: 0, discount: 0, label: 'No scheme'};
   if (!schemeSlots.includes(Number(slot)) || data[`Scheme ${slot} enabled`] !== 'Yes') throw new Error(`Scheme ${slot} is unavailable.`);
   const type = data[`Scheme ${slot} type`] || 'Buy + free';
+  if (type === DIRECT_NET_SCHEME) {
+    const minimumQty = numberField(data, `Scheme ${slot} minimum qty`, 100000, true)!;
+    const netRate = numberField(data, `Scheme ${slot} net rate`, 10000000, true)!;
+    if (!Number.isInteger(minimumQty) || minimumQty < 1) throw new Error(`Scheme ${slot} needs a minimum quantity from 1 to 100000 whole units.`);
+    if (netRate <= 0 || !/^\d+(?:\.\d{1,2})?$/.test(data[`Scheme ${slot} net rate`].trim())) throw new Error(`Scheme ${slot} needs a positive net rate with up to 2 decimals, excluding GST.`);
+    return {type, paid: minimumQty, free: 0, discount: 0, minimumQty, netRate, label: `Direct company only · ${minimumQty}+ units @ ${formatPrice(netRate)} / unit excl. GST`};
+  }
   if (type === 'Discount') {
     const discount = numberField(data, `Scheme ${slot} discount %`, 100, true)!;
     return {type, paid: 1, free: 0, discount, label: `${discount}% discount`};
@@ -104,9 +117,14 @@ export function effectiveRates(rateExGST: number, gst: number, paid: number, fre
 /** Scheme reference price is independent of the current order quantity. */
 export function orderSchemePreview(line: {
   scheme: string; schemeType?: string; schemePaid?: number; schemeFree?: number; schemeDiscount?: number;
-  schemeLabel?: string; baseRate?: number; rate: number; gst: number; qty: number; schemeNote?: string;
+  schemeLabel?: string; schemeMinimumQty?: number; baseRate?: number; rate: number; gst: number; qty: number; schemeNote?: string;
 }) {
   if (line.scheme === 'none' || !line.schemeType || line.baseRate === undefined) return null;
+  if (line.schemeType === DIRECT_NET_SCHEME) {
+    const paid = line.schemeMinimumQty ?? 0, rates = effectiveRates(line.rate / 100, line.gst, 1, 0);
+    if (!rates || !Number.isInteger(paid) || paid < 1) return null;
+    return {rates, paid, free: 0, label: line.schemeLabel || DIRECT_NET_SCHEME, qualifies: line.qty >= paid, nextQuantity: line.qty < paid ? paid : null};
+  }
   const paid = line.schemeType === 'Discount' ? 1 : line.schemePaid ?? 0;
   const free = line.schemeType === 'Discount' ? 0 : line.schemeFree ?? 0;
   if (!Number.isInteger(paid) || paid < 1 || !Number.isInteger(free) || free < 0) return null;

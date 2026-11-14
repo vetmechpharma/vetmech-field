@@ -1,5 +1,5 @@
 import {primaryRetailReferences,type RetailReferences} from './primary-schemes';
-import {productScheme,roundMoney,applyPercentage,type ProductData} from './product-pricing';
+import {productScheme,roundMoney,applyPercentage,DIRECT_NET_SCHEME,type ProductData} from './product-pricing';
 import type {Member,StoredRecord} from './permissions';
 export function idList(raw:string|undefined):string[]{try{const a=JSON.parse(raw||'[]');return Array.isArray(a)?[...new Set(a.filter(v=>typeof v==='string'))]:[]}catch{return []}}
 export function customerVisible(m:Member,r:StoredRecord){if(m.role==='admin')return true;const d=JSON.parse(r.data),routes=idList(m.route_ids);if(idList(d['Blocked MRs']).includes(m.email))return false;if(idList(d['Outside route MRs']).includes(m.email))return true;if(r.owner===m.user_id)return true;let access='';try{access=JSON.parse(d['MR route access']||'{}')[m.email]||''}catch{}if(access&&routes.includes(access))return true;const routeOK=routes.includes(d['Route ID'])||(!routes.length&&(!m.route||d.Route===m.route));return routeOK&&(r.assigned_to===m.email||d['Route access']==='Yes');}
@@ -8,29 +8,39 @@ export function validGPS(g:unknown):g is GPSPoint{if(!g||typeof g!=='object')ret
 export function gpsString(p:GPSPoint){return `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)} (±${Math.round(p.accuracy)} m)`;}
 export async function captureGPS():Promise<GPSPoint>{if(!navigator.geolocation)throw new Error('GPS is unavailable. Use a device with location access.');const p=await new Promise<GeolocationPosition>((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,maximumAge:0,timeout:20000})).catch(()=>{throw new Error('GPS is required. Allow location access and try again.');});return {lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy,capturedAt:new Date(p.timestamp).toISOString()};}
 export function legacyGPS(data:Record<string,string>){try{return JSON.parse(data['GPS data']||'null')}catch{return null}}
-export type PricedLine={baseRate?:number;schemeType?:string;schemePaid?:number;schemeFree?:number;schemeDiscount?:number;schemeLabel?:string;customRate?:boolean;packing?:string;stockistOffer?:string;retailSchemeIds?:string[];retailSchemes?:string[];retailScheme?:string;discountPercent?:number;manualInvoice?:boolean;batch?:string;expiry?:string;allocations?:import("./batch-stock").BatchAllocation[];productId:string;name:string;qty:number;free:number;scheme:string;schemeNote?:string;rate:number;mrp:number;ptr:number;gst:number;subtotal:number;total:number};
-export function priceLine(product:Record<string,string>,productId:string,qty:number,scheme:string,primary:boolean):PricedLine{
+export type PricedLine={baseRate?:number;schemeType?:string;schemePaid?:number;schemeFree?:number;schemeDiscount?:number;schemeMinimumQty?:number;schemeNetRate?:number;schemeLabel?:string;customRate?:boolean;packing?:string;stockistOffer?:string;retailSchemeIds?:string[];retailSchemes?:string[];retailScheme?:string;discountPercent?:number;manualInvoice?:boolean;batch?:string;expiry?:string;allocations?:import("./batch-stock").BatchAllocation[];productId:string;name:string;qty:number;free:number;scheme:string;schemeNote?:string;rate:number;mrp:number;ptr:number;gst:number;subtotal:number;total:number};
+export function priceLine(product:Record<string,string>,productId:string,qty:number,scheme:string,primary:boolean,direct=false):PricedLine{
+ const offer=productScheme(product,scheme);
+ if(offer.type===DIRECT_NET_SCHEME){if(primary||!direct)throw new Error('This net-rate offer is for direct company orders only.');if(qty<offer.minimumQty!)throw new Error(`This direct offer requires at least ${offer.minimumQty} units of ${product.Name}.`);}
  const base=Number(primary?product.PTS:product['Retail offer enabled']==='Yes'?product['Retail offer rate']:product.PTR),gst=Number(product['GST %']||0);
  if(!Number.isFinite(base)||base<=0||base>10000000)throw new Error(`Set a valid ${primary?'PTS':'PTR / retail offer'} for ${product.Name}.`);
  if(!Number.isFinite(gst)||gst<0||gst>100)throw new Error('GST must be between 0 and 100%.');
  if(!Number.isInteger(qty)||qty<1||qty>100000)throw new Error('Enter a whole quantity between 1 and 100000.');
- const offer=productScheme(product,scheme),free=Math.floor(qty/offer.paid)*offer.free;
+ const free=Math.floor(qty/offer.paid)*offer.free;
  if(!Number.isSafeInteger(free)||free>10000000)throw new Error('Scheme free quantity is too large.');
- const baseRate=Math.round(roundMoney(base)*100),rate=applyPercentage(baseRate,offer.discount);
+ const baseRate=Math.round(roundMoney(base)*100),rate=offer.type===DIRECT_NET_SCHEME?Math.round(offer.netRate!*100):applyPercentage(baseRate,offer.discount);
  const subtotal=rate*qty,total=applyPercentage(subtotal,gst,true);
- return {productId,name:product.Name,qty,free,scheme,rate,baseRate,schemeType:offer.type,schemePaid:offer.paid,schemeFree:offer.free,schemeDiscount:offer.discount,schemeLabel:offer.label,mrp:Math.round(Number(product.MRP||0)*100),ptr:Math.round(Number(product.PTR||0)*100),gst,subtotal,total};
+ return {productId,name:product.Name,qty,free,scheme,rate,baseRate,schemeType:offer.type,schemePaid:offer.paid,schemeFree:offer.free,schemeDiscount:offer.discount,schemeLabel:offer.label,...(offer.type===DIRECT_NET_SCHEME?{schemeMinimumQty:offer.minimumQty,schemeNetRate:rate}:{}),mrp:Math.round(Number(product.MRP||0)*100),ptr:Math.round(Number(product.PTR||0)*100),gst,subtotal,total};
 }
 
 /** Preserve the original base price and same-scheme terms unless Admin approves repricing. */
-export function orderLine(product:ProductData,productId:string,qty:number,scheme:string,saved?:PricedLine,reprice=false):PricedLine{
- if(!saved||reprice)return priceLine(product,productId,qty,scheme,false);
- if(saved.qty===qty&&saved.scheme===scheme)return {...saved};
+export function orderLine(product:ProductData,productId:string,qty:number,scheme:string,saved?:PricedLine,reprice=false,direct=false):PricedLine{
+ if(!saved||reprice)return priceLine(product,productId,qty,scheme,false,direct);
+ if(saved.qty===qty&&saved.scheme===scheme){assertDirectNetLine(saved,direct);return {...saved};}
  const data={...product,PTR:String((saved.baseRate??saved.rate)/100),'Retail offer enabled':'No','GST %':String(saved.gst)};
  if(saved.scheme===scheme&&scheme!=='none'&&saved.schemeType){
-  Object.assign(data,{[`Scheme ${scheme} enabled`]:'Yes',[`Scheme ${scheme} type`]:saved.schemeType,[`Scheme ${scheme} paid`]:String(saved.schemePaid??1),[`Scheme ${scheme} free`]:String(saved.schemeFree??0),[`Scheme ${scheme} discount %`]:String(saved.schemeDiscount??0)});
+  Object.assign(data,{[`Scheme ${scheme} enabled`]:'Yes',[`Scheme ${scheme} type`]:saved.schemeType,[`Scheme ${scheme} paid`]:String(saved.schemePaid??1),[`Scheme ${scheme} free`]:String(saved.schemeFree??0),[`Scheme ${scheme} discount %`]:String(saved.schemeDiscount??0),[`Scheme ${scheme} minimum qty`]:String(saved.schemeMinimumQty??0),[`Scheme ${scheme} net rate`]:String((saved.schemeNetRate??saved.rate)/100)});
  }
- const q=priceLine(data,productId,qty,scheme,false);
+ const q=priceLine(data,productId,qty,scheme,false,direct);
  return {...q,mrp:saved.mrp,ptr:saved.ptr,packing:saved.packing,customRate:saved.customRate};
+}
+
+/** Validate saved / approved offers as well as newly calculated lines. */
+export function assertDirectNetLine(line:PricedLine,direct:boolean){
+ if(line.schemeType!==DIRECT_NET_SCHEME)return;
+ if(!direct)throw new Error('This net-rate offer is for direct company orders only.');
+ if(!Number.isInteger(line.schemeMinimumQty)||!line.schemeMinimumQty||line.schemeMinimumQty<1||line.qty<line.schemeMinimumQty)throw new Error(`This direct offer requires at least ${line.schemeMinimumQty||1} units of ${line.name}.`);
+ if(line.free!==0||line.schemeDiscount!==0||!Number.isSafeInteger(line.schemeNetRate)||!line.schemeNetRate||line.rate!==line.schemeNetRate)throw new Error('A direct net-rate offer cannot be combined with free units, discounts or a special proposed rate.');
 }
 
 export function receiptLine(product:Record<string,string>,productId:string,line:RetailReferences&{qty:number;freeQty?:number;packing?:string;stockistOffer?:string;discountPercent?:number},saved?:PricedLine):PricedLine{

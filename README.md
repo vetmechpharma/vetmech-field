@@ -82,6 +82,27 @@ or automatic production data seed is provided.
 Secrets stay in shared/.env, business data stays in MongoDB, and source history
 stays in GitHub. Maintain backups of each as described in the installation guide.
 
+## Direct company net-rate offers
+
+In Products & pricing, add an offer with type **Direct company · net rate**, a
+minimum order quantity and the final per-unit rate excluding GST. For example,
+`100 units @ ₹25` bills 100 units at ₹2,500 excluding GST (₹2,625 with 5% GST).
+The rate applies to every unit once that product line reaches the minimum.
+It is an alternative to buy + free schemes; no free units, percentage discount
+or special proposed rate can be added to the same offer.
+
+MRs see **Direct company only** in the offer selector, the minimum quantity and
+net rates with/without GST. Stockist orders and primary retail references cannot
+use these offers. Below-minimum orders and quantity reductions are rejected by
+the server. Direct orders still require normal Admin order approval. Admin profit
+uses the actual net revenue excluding GST less landing cost; MR cannot see costs.
+Saved orders retain their offer threshold, rate and GST until Admin reprices them.
+
+The new-product editor offers buy + free or direct net rate. Existing percentage
+schemes and historical orders remain readable and usable. CSV imports/exports
+support `30+10; Direct 100 @ 25; Direct 200 @ 23.50` in Offer Schemes; old percentage
+CSV values remain supported. No data migration is required.
+
 ## Product pack variants
 
 Products are matched by **name and packing together**, ignoring case and surrounding

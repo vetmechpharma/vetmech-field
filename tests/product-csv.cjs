@@ -56,3 +56,10 @@ assert.match(previewProducts(productCSV([pack15],true),[pack15,{...pack15,id:'du
 assert.equal(catalogue.productIdentity({Name:'Legacy'}),catalogue.productIdentity({Name:' legacy ',Pack:' '}));
 assert.equal(catalogue.productLabel(pack15.data),'X-TRAZ (Amitraz) · 15 ml');assert.equal(catalogue.catalogueLabel(pack50),'X-TRAZ (Amitraz) · 50 ML');assert.equal(catalogue.catalogueLabel({kind:'Customers',data:{Name:'Doctor',Pack:'Not a product'}}),'Doctor');
 console.log('PASS: same-brand pack variants import/export separately, exact-pack updates preserve private costs, new packs do not inherit another pack’s data, and duplicate name+pack pairs are rejected.');
+
+const netCSV=previewProducts(writeCSV([legacyProductHeaders,input('Net offers','100','30+10; Direct 100 @ 25; Direct 200 @ 23.50')]),[])[0];
+assert.equal(netCSV.error,'');assert.equal(netCSV.data['Scheme 2 type'],'Direct net rate');assert.equal(netCSV.data['Scheme 2 minimum qty'],'100');assert.equal(netCSV.data['Scheme 2 net rate'],'25');
+const netRoundTrip=previewProducts(productCSV([{id:'net',kind:'Products',data:netCSV.data}],true),[])[0];assert.equal(netRoundTrip.error,'');assert.equal(netRoundTrip.data['Scheme 3 net rate'],'23.5');
+assert(productCSV([{id:'net',kind:'Products',data:netCSV.data}],false).includes('Direct 100 @ 25'));
+for(const offer of ['Direct 0 @ 25','Direct 100 @ 0','Direct 100 @ 25.001','Direct 100001 @ 25','Direct 100 @ 25; direct 0100 @ 25.00'])assert(previewProducts(writeCSV([legacyProductHeaders,input('Invalid offer','100',offer)]),[])[0].error);
+console.log('PASS: direct net-rate CSV round-trip, multiple quantity tiers, MR-visible offer terms and minimum/rate/duplicate validation.');

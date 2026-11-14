@@ -1,5 +1,5 @@
 'use client';
-import {orderCompanyProfit, formatPrice as money, orderSchemePreview, withGST, effectiveRates, hasPricingMargins, previewProductPricing, productScheme, profitOnCost, schemeLabel, schemeSlots, type ProductData} from '../lib/product-pricing';
+import {DIRECT_NET_SCHEME, isDirectNetScheme, orderCompanyProfit, formatPrice as money, orderSchemePreview, withGST, effectiveRates, hasPricingMargins, previewProductPricing, productScheme, profitOnCost, schemeLabel, schemeSlots, type ProductData} from '../lib/product-pricing';
 import type {PricedLine} from '../lib/field-rules';
 
 function RatePair({label, exGST, inclGST, tone = 'ptr'}: {label: string; exGST: number | null; inclGST: number | null; tone?: string}) {
@@ -54,6 +54,12 @@ export function SchemePricing({value, slot, admin}: {value: ProductData; slot: n
   if (preview.error) return <p className="field-help">Complete product pricing to see scheme rates.</p>;
   let scheme; try { scheme = productScheme(value, slot); } catch { return <p className="field-help">Complete this scheme to see its net rates.</p>; }
   const gst = Number(preview.data['GST %'] || 0);
+  if (scheme.type === DIRECT_NET_SCHEME) return <div className="scheme-pricing direct-net-offer">
+    <p className="pricing-caption"><b>Direct company only</b> · Minimum {scheme.minimumQty} units</p>
+    <div className="pricing-grid"><RatePair label="Final net rate / unit" exGST={scheme.netRate!} inclGST={withGST(scheme.netRate!, gst)}/>
+      {admin && <Profit label="Direct · final net rate" pts={scheme.netRate!} cost={value['Landing cost']}/>}</div>
+    <small>One alternative offer. No additional free units or discount. Not available for stockist orders.</small>
+  </div>;
   const ptr = preview.data.PTR?.trim() ? effectiveRates(Number(preview.data.PTR), gst, scheme.paid, scheme.free, scheme.discount) : null;
   const pts = preview.data.PTS?.trim() ? effectiveRates(Number(preview.data.PTS), gst, scheme.paid, scheme.free, scheme.discount) : null;
   return <div className="scheme-pricing">
@@ -89,17 +95,34 @@ export function OrderNetRates({line, proposed = false, saved = false, onUseSchem
   const different = scheme && (actual.exGST === null || actual.inclGST === null || money(scheme.rates.exGST) !== money(actual.exGST) || money(scheme.rates.inclGST) !== money(actual.inclGST));
   return <section className="order-net-rates" aria-label="Order net rates" aria-live="polite">
     <div className="pricing-grid">
-      {scheme ? <RatePair label={`${proposed ? 'Proposed scheme' : 'Scheme'} net / unit · ${scheme.label}`} exGST={scheme.rates.exGST} inclGST={scheme.rates.inclGST}/> : <RatePair label={proposed ? 'Proposed order net / supplied unit' : 'Order net / supplied unit'} exGST={actual.exGST} inclGST={actual.inclGST}/>}
+      {scheme ? <RatePair label={line.schemeType === DIRECT_NET_SCHEME ? 'Final net rate / unit' : `${proposed ? 'Proposed scheme' : 'Scheme'} net / unit · ${scheme.label}`} exGST={scheme.rates.exGST} inclGST={scheme.rates.inclGST}/> : <RatePair label={proposed ? 'Proposed order net / supplied unit' : 'Order net / supplied unit'} exGST={actual.exGST} inclGST={actual.inclGST}/>}
       {different && <RatePair label="Current quantity · net / supplied unit" exGST={actual.exGST} inclGST={actual.inclGST} tone="actual"/>}
     </div>
     {scheme && scheme.free > 0 && !line.schemeNote && <div className={`scheme-quantity-note${scheme.qualifies ? '' : ' below-scheme-minimum'}`}>
       <span>{!scheme.qualifies ? `This scheme needs ${scheme.paid} paid units. Current quantity ${line.qty} earns no free units.` : `Scheme: ${scheme.paid} paid + ${scheme.free} free per complete group.`}{different ? ' Order totals use the actual paid and free quantities below.' : ''}</span>
       {scheme.nextQuantity && onUseSchemeQuantity && <button type="button" className="secondary" onClick={() => onUseSchemeQuantity(scheme.nextQuantity!)}>Use {scheme.nextQuantity} paid units</button>}
     </div>}
-    <p>{saved ? 'Saved' : 'Order'} base: <b>{money((line.baseRate ?? line.rate) / 100)}</b> / paid unit excl. GST · Before scheme discount</p>
+    {line.schemeType === DIRECT_NET_SCHEME ? <p><b>Direct company only</b> · Minimum {line.schemeMinimumQty} units · No additional free units</p> : <p>{saved ? 'Saved' : 'Order'} base: <b>{money((line.baseRate ?? line.rate) / 100)}</b> / paid unit excl. GST · Before scheme discount</p>}
     <p>{line.qty} paid + {line.free} free = {units} units · GST {line.gst}%{line.schemeDiscount ? ` · ${line.schemeDiscount}% discount` : ''}</p>
     <p>Line total: <b>{money(line.subtotal / 100)}</b> excl. GST · <b>{money(line.total / 100)}</b> incl. GST{proposed ? ' · Subject to Admin approval' : ''}</p>
   </section>;
+}
+
+/** Keep the offer visible even when the entered quantity does not yet qualify. */
+export function DirectNetOfferNote({product, slot, qty, saved, direct, onUseMinimum}: {product: ProductData; slot: string; qty: number; saved?: PricedLine; direct: boolean; onUseMinimum: (qty: number) => void}) {
+  if (!isDirectNetScheme(product, slot, saved)) return null;
+  let minimum: number, rate: number, gst: number;
+  try {
+    if (saved?.scheme === slot) {minimum = saved.schemeMinimumQty!; rate = saved.schemeNetRate! / 100; gst = saved.gst;}
+    else {const offer = productScheme(product, slot); minimum = offer.minimumQty!; rate = offer.netRate!; gst = Number(product['GST %'] || 0);}
+  } catch {return null;}
+  const short = qty < minimum;
+  if (direct && !short) return null;
+  return <div className={`full-field scheme-quantity-note direct-net-offer${short ? ' below-scheme-minimum' : ''}`} role="status">
+    <div><b>Direct company only</b><p>Minimum {minimum} units · {money(rate)} / unit excl. GST · {money(withGST(rate, gst))} incl. GST</p><small>No additional free units. Choose a separate scheme for buy + free offers.</small>
+      {!direct ? <p>Select Direct company supply to use this offer.</p> : short ? <p>Add {minimum - qty} more {minimum - qty === 1 ? 'unit' : 'units'} to qualify.</p> : <p>Minimum quantity met.</p>}</div>
+    {direct && short && <button type="button" className="secondary" onClick={() => onUseMinimum(minimum)}>Use {minimum} units</button>}
+  </div>;
 }
 
 export function OrderCompanyProfit({line, product, direct, proposed=false}: {line:PricedLine; product:ProductData; direct:boolean; proposed?:boolean}) {

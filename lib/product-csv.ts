@@ -1,5 +1,5 @@
 import {normalizeProductCategory,sortProducts,productIdentity} from './product-catalogue';
-import {normalizeProductPricing,schemeLabel,schemeSlots,productScheme,withGST} from './product-pricing';
+import {DIRECT_NET_SCHEME,normalizeProductPricing,schemeLabel,schemeSlots,productScheme,withGST} from './product-pricing';
 export type ProductRow={id:string;kind:string;data:Record<string,string>};
 export const legacyProductHeaders=['Product Name','Packing','MRP','PTR','PTS','Offer Schemes'];
 export const productHeaders=['Product Name','Packing','Product category','MRP','GST %','Retail margin %','Stockist margin %','Landing cost','PTR','PTS','PTR incl GST','PTS incl GST','Offer Schemes'];
@@ -13,7 +13,7 @@ export function readCSV(input:string):string[][]{
 }
 function safeCell(v:string){const safe=/^[\s]*[=+\-@]/.test(v)?"'"+v:v;return '"'+safe.replaceAll('"','""')+'"'}
 export function writeCSV(rows:string[][]){return '\uFEFF'+rows.map(r=>r.map(safeCell).join(',')).join('\r\n')+'\r\n'}
-export function offerText(data:Record<string,string>){return schemeSlots.filter(i=>data[`Scheme ${i} enabled`]==='Yes').map(i=>schemeLabel(data,i).replace(' discount','').replaceAll(' ','')).join('; ')}
+export function offerText(data:Record<string,string>){return schemeSlots.filter(i=>data[`Scheme ${i} enabled`]==='Yes').map(i=>{const scheme=productScheme(data,i);return scheme.type===DIRECT_NET_SCHEME?`Direct ${scheme.minimumQty} @ ${scheme.netRate}`:schemeLabel(data,i).replace(' discount','').replaceAll(' ','')}).join('; ')}
 export function productCSV(rows:ProductRow[],admin:boolean){
  const headers=productHeaders.filter(h=>admin||!['PTS','PTS incl GST','Landing cost','Retail margin %','Stockist margin %'].includes(h));
  return writeCSV([headers,...sortProducts(rows.filter(r=>r.kind==='Products')).map(r=>headers.map(h=>{
@@ -29,12 +29,18 @@ export function previewProducts(text:string,existing:ProductRow[]):ProductImport
  const header=csv[0].map(s=>s.trim());if(new Set(header).size!==header.length||header.some(h=>!productHeaders.includes(h))||legacyProductHeaders.some(h=>!header.includes(h)))throw Error('Use the template columns: '+productHeaders.join(', '));
  const seen=new Set<string>();return csv.slice(1).map((cells,index)=>{const get=(h:string)=>{const v=(cells[header.indexOf(h)]||'').trim();return /^'[\s]*[=+\-@]/.test(v)?v.slice(1):v},name=get('Product Name'),packing=get('Packing'),key=productIdentity({Name:name,Pack:packing}),matches=existing.filter(r=>r.kind==='Products'&&productIdentity(r.data)===key),old=matches[0];let error='';const data:Record<string,string>={...old?.data,Name:name,Pack:packing,MRP:get('MRP'),PTR:get('PTR'),PTS:get('PTS')};
  try{if(cells.length!==header.length)throw Error('Row column count does not match the header.');for(const k of ['Product category','GST %','Retail margin %','Stockist margin %','Landing cost'])if(header.includes(k))data[k]=get(k);Object.assign(data,normalizeProductPricing(normalizeProductCategory(data)));if(!name||name.length>200)throw Error('Enter a product name of up to 200 characters.');if(seen.has(key))throw Error('Duplicate product name and packing in this file.');if(matches.length>1)throw Error('Multiple catalogue matches for this name and packing; correct that duplicate first.');if(!data.Pack||data.Pack.length>100)throw Error('Enter packing (up to 100 characters).');for(const k of ['MRP','PTR','PTS'])if(!/^\d+(\.\d{1,2})?$/.test(data[k])||Number(data[k])>10000000)throw Error(k+' must be a nonnegative amount with up to 2 decimals.');
- const schemes=get('Offer Schemes').split(';').map(s=>s.trim()).filter(Boolean);if(schemes.length>20)throw Error('Maximum 20 schemes.');const unique=new Set<string>();for(let i=1;i<=20;i++){data[`Scheme ${i} enabled`]='No';delete data[`Scheme ${i} paid`];delete data[`Scheme ${i} free`];delete data[`Scheme ${i} type`];delete data[`Scheme ${i} discount %`]}
- schemes.forEach((s,n)=>{const m=s.match(/^(\d+)\s*\+\s*(\d+)$/),discount=s.match(/^(\d+(?:\.\d{1,2})?)\s*%$/);if(!m&&!discount)throw Error('Use buy+free or percentage schemes, e.g. 5+1; 10+3; 5%.');
+ const schemes=get('Offer Schemes').split(';').map(s=>s.trim()).filter(Boolean);if(schemes.length>20)throw Error('Maximum 20 schemes.');const unique=new Set<string>();for(let i=1;i<=20;i++){data[`Scheme ${i} enabled`]='No';delete data[`Scheme ${i} paid`];delete data[`Scheme ${i} free`];delete data[`Scheme ${i} type`];delete data[`Scheme ${i} discount %`];delete data[`Scheme ${i} minimum qty`];delete data[`Scheme ${i} net rate`]}
+ schemes.forEach((s,n)=>{
+ const m=s.match(/^(\d+)\s*\+\s*(\d+)$/),discount=s.match(/^(\d+(?:\.\d{1,2})?)\s*%$/),direct=s.match(/^Direct\s+(\d+)\s*@\s*(\d+(?:\.\d{1,2})?)$/i);
+ if(!m&&!discount&&!direct)throw Error('Use buy+free or direct net-rate schemes, e.g. 30+10; Direct 100 @ 25. Existing percentage offers such as 5% are also supported.');
  if(m&&(Number(m[1])<1||Number(m[2])<1||Number(m[1])>100000||Number(m[2])>100000))throw Error('Use positive buy+free quantities up to 100000.');
- const canonical=discount?Number(discount[1])+'%':Number(m![1])+'+'+Number(m![2]);if(unique.has(canonical))throw Error('Duplicate offer scheme.');unique.add(canonical);
- const slot=n+1;data[`Scheme ${slot} enabled`]='Yes';data[`Scheme ${slot} type`]=discount?'Discount':'Buy + free';
- if(discount)data[`Scheme ${slot} discount %`]=String(Number(discount[1]));else{data[`Scheme ${slot} paid`]=String(Number(m![1]));data[`Scheme ${slot} free`]=String(Number(m![2]));}productScheme(data,slot);});
+ const canonical=direct?`Direct ${Number(direct[1])} @ ${Number(direct[2])}`:discount?Number(discount[1])+'%':Number(m![1])+'+'+Number(m![2]);
+ if(unique.has(canonical))throw Error('Duplicate offer scheme.');unique.add(canonical);
+ const slot=n+1;data[`Scheme ${slot} enabled`]='Yes';data[`Scheme ${slot} type`]=direct?DIRECT_NET_SCHEME:discount?'Discount':'Buy + free';
+ if(direct){data[`Scheme ${slot} minimum qty`]=String(Number(direct[1]));data[`Scheme ${slot} net rate`]=String(Number(direct[2]));}
+ else if(discount)data[`Scheme ${slot} discount %`]=String(Number(discount[1]));
+ else{data[`Scheme ${slot} paid`]=String(Number(m![1]));data[`Scheme ${slot} free`]=String(Number(m![2]));}
+ productScheme(data,slot);});
 
  }catch(e){error=(e as Error).message}seen.add(key);return {row:index+2,name,id:old?.id,data,before:old?.data,error};});
 }

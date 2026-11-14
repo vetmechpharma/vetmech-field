@@ -151,6 +151,7 @@ async function ok(response,expected=200){assert.equal(response.status,expected,a
  const invoice=(kind,stockistId,lines,extra={})=>{const quotes=kind==='secondary'?[]:lines.map(l=>load(path.join(root,'lib/field-rules.ts')).priceLine(JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(l.productId).data),l.productId,l.qty,l.scheme||'none',true));return {id:crypto.randomUUID(),kind,stockistId,date:fieldDate,...(kind!=='secondary'?{invoiceValue:quotes.reduce((n,l)=>n+l.subtotal,0)/100}:{}),lines:lines.map((l,i)=>kind==='secondary'?l:{...l,freeQty:quotes[i].free,batch:'TEST-BATCH',expiry:'2035-12-31'}),...extra}};
  const qty=(stock,prod)=>sql.prepare('SELECT quantity FROM stock_balances WHERE stockist_id=? AND product_id=?').get(stock,prod)?.quantity||0;
  await require('./product-packing-integration.cjs')({sql,ok,request,records,commerce,invoice,qty,s1,shared,owner,alice,who:u=>{identity=u}});
+ await require('./direct-net-integration.cjs')({load,root,sql,ok,request,records,commerce,invoice,qty,s1,shared,owner,alice,who:u=>{identity=u}});
  await ok(await commerce.POST(request(invoice('primary',s1.id,[{productId:product.id,qty:50,scheme:'1'}]))),403);
  identity=owner;
  const primary=invoice('primary',s1.id,[{productId:product.id,qty:50,scheme:'1'},{productId:otherProduct.id,qty:10,scheme:'none'}]);await ok(await commerce.POST(request(primary)));assert.equal(qty(s1.id,product.id),60);assert.equal(qty(s1.id,otherProduct.id),10);

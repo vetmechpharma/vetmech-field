@@ -14,7 +14,7 @@ import {sendWhatsApp} from '../../../lib/whatsapp';
 import {z} from 'zod';
 import {readJSON,member,db,json,sameOrigin,failure,HttpError,notification} from '../../../lib/server';
 import {OWNER_EMAIL,type Member} from '../../../lib/permissions';
-import {priceLine,idList,type PricedLine} from '../../../lib/field-rules';
+import {priceLine,assertDirectNetLine,idList,type PricedLine} from '../../../lib/field-rules';
 import {record,customer,stockistAllowed,ledgerFailure,indiaDay,guard} from '../../../lib/operations';
 import {stockistIDs,customerCategory} from '../../../lib/customers';
 const line=z.object({freeQty:z.number().int().min(0).max(100000).optional(),packing:z.string().trim().max(100).optional(),retailSchemeIds:z.array(z.string().regex(/^(?:[1-9]|1[0-9]|20)$/)).max(20).optional(),stockistOffer:z.string().trim().max(200).optional(),retailSchemes:z.array(z.string().trim().max(200)).max(20).optional(),retailScheme:z.string().trim().max(200).optional(),discountPercent:z.number().finite().min(0).max(100).optional(),productId:z.string().min(1),qty:z.number().int().min(1).max(100000),batch:z.string().trim().max(80).optional(),expiry:z.string().optional(),customPaid:z.number().int().min(1).max(100000).optional(),customFree:z.number().int().min(1).max(100000).optional(),scheme:z.string().regex(/^(none|other|[1-9]|1[0-9]|20)$/).default('none'),proposedRate:z.number().finite().min(0).max(10000000).optional(),proposedFree:z.number().int().min(0).max(100000).optional()});
@@ -63,11 +63,11 @@ export async function POST(req:Request){try{
  for(const l of b.lines){const product=await record(l.productId,'Products');try{
   if(b.kind!=='secondary'){items.push(receiptLine(product.details,l.productId,l));continue;}
   const captured=approved?.find(item=>item.productId===l.productId);
-  const standard=captured||{...priceLine(product.details,l.productId,l.qty,l.scheme==='other'?'none':l.scheme,false),packing:product.details.Pack||''};
+  const standard=captured||{...priceLine(product.details,l.productId,l.qty,l.scheme==='other'?'none':l.scheme,false,b.stockistId===COMPANY_STOCK_ID),packing:product.details.Pack||''};
   original.push(standard);
-  let quoted=captured||{...requestedOrderLine(product.details,l),packing:product.details.Pack||''};
+  let quoted=captured||{...requestedOrderLine(product.details,l,undefined,false,b.stockistId===COMPANY_STOCK_ID),packing:product.details.Pack||''};
   if(!captured&&b.stockistId===COMPANY_STOCK_ID)quoted=proposedLine(quoted,l);
-  items.push(quoted);
+  assertDirectNetLine(quoted,b.stockistId===COMPANY_STOCK_ID);items.push(quoted);
  }catch(e){throw new HttpError(400,(e as Error).message)}}
  const customScheme=hasCustomScheme(b.lines);
  if(b.kind==='secondary'&&!review&&(customScheme||items.some((q,i)=>q.rate!==original[i].rate||q.free!==original[i].free))){
@@ -160,7 +160,7 @@ export async function PATCH(req:Request){try{
  const previous=items;items=[];
  if(new Set(b.lines.map((l:any)=>l.productId)).size!==b.lines.length)throw new HttpError(400,'Add each product once.');
  const captured=review?(JSON.parse(review.body).schemeItems||(!b.reprice?JSON.parse(review.body).proposedItems:undefined)):undefined;
- for(const l of b.lines){const product=await record(l.productId,'Products'),saved=previous.find(i=>i.productId===l.productId);let q:PricedLine;try{q=captured?.find((i:PricedLine)=>i.productId===l.productId)||requestedOrderLine(product.details,l,saved,b.reprice);if(!captured&&old.stockist_id===COMPANY_STOCK_ID)q=proposedLine(q,l)}catch(e){throw new HttpError(400,(e as Error).message)}q.packing=saved?.packing||product.details.Pack||'';items.push(q)}
+ for(const l of b.lines){const product=await record(l.productId,'Products'),saved=previous.find(i=>i.productId===l.productId);let q:PricedLine;try{q=captured?.find((i:PricedLine)=>i.productId===l.productId)||requestedOrderLine(product.details,l,saved,b.reprice,old.stockist_id===COMPANY_STOCK_ID);if(!captured&&old.stockist_id===COMPANY_STOCK_ID)q=proposedLine(q,l);assertDirectNetLine(q,old.stockist_id===COMPANY_STOCK_ID)}catch(e){throw new HttpError(400,(e as Error).message)}q.packing=saved?.packing||product.details.Pack||'';items.push(q)}
  if(old.status==='Delivered'&&customSchemeChanged(previous,items))throw new HttpError(409,'A completed order cannot receive a new custom scheme. Create a new order for the new offer.');
  if(actor.role!=='admin'&&(hasCustomScheme(b.lines)||old.stockist_id===COMPANY_STOCK_ID&&previous.some(i=>!!i.schemeNote)||old.accepted||old.status==='Delivered'||b.reprice||b.lines.some((l:any)=>l.proposedRate!==undefined||l.proposedFree!==undefined))){
   const existing=await db().prepare('SELECT * FROM workflow_requests WHERE id=?').bind(b.requestId).first<any>();

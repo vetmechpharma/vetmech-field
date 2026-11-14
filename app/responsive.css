@@ -427,3 +427,12 @@
 .reset-delete-button:disabled{opacity:.45;cursor:not-allowed}.reset-delete-button:focus-visible{outline:3px solid #fda4af;outline-offset:3px}
 @media(max-width:700px){.reset-scope{grid-template-columns:1fr}.reset-counts{grid-template-columns:repeat(2,minmax(0,1fr))}.reset-actions>button{flex:1 1 130px}.reset-actions .reset-delete-button{flex-basis:100%}.data-reset-panel .form-grid{grid-template-columns:1fr}}
 @media(max-width:400px){.reset-counts{grid-template-columns:1fr}.reset-review-heading h3{font-size:16px}}
+
+/* Direct-company quantity offers: compact, with a clear minimum before ordering. */
+.direct-net-offer{border-left:3px solid #087f6d;border-radius:8px;padding:10px 12px;background:#eaf7f2;min-width:0;overflow-wrap:anywhere}
+.scheme-quantity-note.direct-net-offer{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:12px;font-size:13px}
+.scheme-quantity-note.direct-net-offer>div{flex:1 1 240px;min-width:0}
+.scheme-quantity-note.direct-net-offer p{margin:4px 0;line-height:1.5}
+.scheme-quantity-note.direct-net-offer button{min-height:44px;white-space:normal}
+.direct-net-offer.below-scheme-minimum{border-left-color:#c1831a;background:#fff6e7;color:#795018}
+@media(max-width:640px){.scheme-quantity-note.direct-net-offer button{width:100%}}
