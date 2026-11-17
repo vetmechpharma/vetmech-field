@@ -15,7 +15,7 @@ Future months can be prepared in advance. A first programme created partway thro
 
 ## Shared monthly holiday calendar
 
-Each month has its own company-wide holiday calendar, publication status and revision. Publishing December does not invalidate November’s pending tour approvals. MRs see the same holiday dates and notes; they cannot edit the shared calendar. They can save a tour draft beforehand, but submission requires Admin to publish that month’s holidays. Publication sends an in-app notification to active MRs.
+Each month has its own company-wide holiday calendar, publication status and revision. Publishing December does not invalidate November’s pending tour approvals. MRs see the same holiday dates and notes; they cannot edit the shared calendar. They can save drafts and submit valid daily or monthly plans before publication. The plans wait for review; Admin must publish that month’s holidays before approving them. Publication reconciles pending plans with the holiday dates without requiring unaffected plans to be resubmitted. Publication sends an in-app notification to active MRs.
 
 A **2026 Central government reference** for Delhi/New Delhi offices can populate the selected month. It is optional and is not a complete Tamil Nadu or all-state calendar. Admin must review regional festivals and company holidays before publication. Dates are not automatically fetched or approved from external holiday lists.
 

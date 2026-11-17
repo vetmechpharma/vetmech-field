@@ -7,7 +7,7 @@ module.exports=async function(c){
  const month=fieldDate.slice(0,7),year=month.slice(0,4),nextMonth=load(path.join(root,'lib/route-insights.ts')).shiftMonth(month,1);
  const get=(email='',m=month)=>api.GET(new Request('https://app.test/api/monthly-tour?month='+m+(email?'&email='+encodeURIComponent(email):'')));
  const read=(u=alice,m=month)=>JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(logic.programmeID(u.email,m)).data);
- const calendar=(y=month)=>JSON.parse(sql.prepare('SELECT data FROM records WHERE id=?').get(logic.calendarID(y)).data);
+ const calendar=(y=month)=>{const r=sql.prepare('SELECT data FROM records WHERE id=?').get(logic.calendarID(y));return r?JSON.parse(r.data):logic.emptyCalendar(y)};
  const call=(body,status=200)=>api.POST(request(body)).then(r=>ok(r,status));
  const monthAct=(action,extra={},status=200,u=alice,m=month)=>call({action,email:u.email,month:m,revision:sql.prepare('SELECT data FROM records WHERE id=?').get(logic.programmeID(u.email,m))?read(u,m).revision:0,...extra},status);
  const daysFor=(m=month,ids=[r1.id],start=m===month?fieldDate:m+'-01')=>logic.workingDates(m,calendar(m),start).map(date=>({date,type:'visit',routes:ids,reason:''}));
@@ -16,7 +16,13 @@ module.exports=async function(c){
  await call({action:'calendar',month,revision:0,holidays:logic.nationalHolidays(year).filter(h=>h.date.startsWith(month)),reason:'Calendar review'},403);
  await monthAct('save',{days:[{date:fieldDate,type:'visit',routes:[r2.id],reason:''}]},400);
  await monthAct('save',{days:[{date:fieldDate,type:'visit',routes:[r1.id],reason:''}]});
- await monthAct('submit',{days:read().days},409); // Calendar has not been confirmed.
+ await monthAct('submit',{days:read().days},400); // Incomplete month is still rejected.
+ const sunday=logic.monthDates(month).find(d=>d>=fieldDate&&new Date(d+'T12:00:00Z').getUTCDay()===0);
+ await monthAct('submit',{days:[...daysFor(),{date:sunday,type:'visit',routes:[r1.id],reason:''}]},400);
+ await monthAct('submit',{days:daysFor()});assert.equal(read().status,'Pending');assert.equal(calendar().confirmed,false);
+ assert.equal((await ok(await records.GET())).tourGate.allowed,false);
+ who(owner);const awaitingCalendar=await monthAct('approve',{},409);assert(awaitingCalendar.error.includes('Publish holidays'));assert.equal(read().status,'Pending');
+ assert((await ok(await get(alice.email))).programmes.every(p=>p.calendarConfirmed===false));who(alice);
  await ok(await records.POST(request({kind:'Visits',data:{Customer:'Shared doctor',Date:fieldDate}})),409);
  await ok(await drafts.POST(request({id:crypto.randomUUID(),kind:'visit',revision:0,payload:{form:{Customer:'Shared doctor',Date:fieldDate}}})),409);
  who(owner);await ok(await api.POST(request({action:'calendar'},'POST','https://evil.test')),403);
@@ -25,10 +31,9 @@ module.exports=async function(c){
  sql.prepare("INSERT INTO period_locks VALUES (?,1,'calendar-test',?,?,?)").run(pastMonth,new Date().toISOString(),owner.email,'Prior approved report');
  const holidays=logic.nationalHolidays(year).filter(h=>h.date.startsWith(month));
  await call({action:'calendar',month,revision:0,holidays,reason:'Reviewed government and state dates'});sql.exec('DELETE FROM period_locks');
- who(alice);await monthAct('submit',{days:read().days},400); // Missing working days.
- const sunday=logic.monthDates(month).find(d=>d>=fieldDate&&new Date(d+'T12:00:00Z').getUTCDay()===0);
- await monthAct('submit',{days:[...daysFor(),{date:sunday,type:'visit',routes:[r1.id],reason:''}]},400);
- await monthAct('submit',{days:daysFor()});assert.equal(read().status,'Pending');
+ assert.equal(read().status,'Pending');assert.equal(read().calendarRevision,calendar().revision);
+ assert((await ok(await get(alice.email))).programmes.every(p=>p.calendarConfirmed===true));
+ who(alice);assert.equal(read().status,'Pending'); // First publication keeps the submitted month reviewable.
  assert.equal((await ok(await records.GET())).tourGate.allowed,false);
  await monthAct('approve',{},403);await monthAct('save',{days:daysFor()},409);
  who(owner);

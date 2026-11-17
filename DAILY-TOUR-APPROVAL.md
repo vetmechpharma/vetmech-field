@@ -5,6 +5,8 @@ In **Tour plan → Tour programme**, choose either:
 - **Full month:** choose routes beside any date and click **Submit this day** to send only that date. Other dates may stay blank, and unfinished route choices remain on screen. To send the whole programme, complete all working dates and use **Submit month for approval**.
 - **Single day:** choose a date and routes (or a leave reason), then **Submit day for approval**. Upcoming dates can remain unplanned.
 
+Selecting routes enables submission even if Admin has not yet published that month’s holidays. The request stays pending until holidays are published and Admin approves it. A full month still needs every working date completed; the footer lists missing dates and links to the first one. Pending daily submissions or schedule changes must be reviewed or withdrawn first. Submission results and errors are brought into view.
+
 A submitted date shows **Daily approval pending** with **Review day**. If a pending monthly submission already covers the chosen date, **Single day → Withdraw month to plan this day** returns the month to Draft before a separate submission. Approved dates use **Request change**.
 
 Admin reviews each daily submission in **Approvals → Tour programme approvals**, using **Approve day** or **Reject day**. Approval permits visits only on that date's approved routes. Attendance, GPS and customer access checks still apply. The MR can withdraw a pending daily submission, edit it and resubmit.

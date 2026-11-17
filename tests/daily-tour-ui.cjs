@@ -7,7 +7,7 @@ const {createRoot}=require('react-dom/client'),base=path.resolve(__dirname,'..')
 function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file).exports;const module={exports:{}};cache.set(file,module);const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText;new Function('require','module','exports',code)(name=>{if(!name.startsWith('.'))return require(name);let p=path.resolve(path.dirname(file),name);if(!path.extname(p))p+=fs.existsSync(p+'.tsx')?'.tsx':'.ts';return load(p)},module,module.exports);return module.exports}
 const {MonthlyTour,TourApprovals}=load(path.join(base,'components/monthly-tour.tsx'));
 const user={role:'mr',email:'mr@example.test',name:'Test MR',status:'active'},admin={role:'admin',email:'admin@example.test',name:'Admin'};
-const calendar={year:'2026',month:'2026-11',name:'Published holidays',revision:1,confirmed:true,holidays:[]};
+const calendar={year:'2026',month:'2026-11',name:'Holidays awaiting publication',revision:0,confirmed:false,holidays:[]};
 const routes=[{id:'erode',name:'Erode route'},{id:'karur',name:'Karur route'}];
 let plans=[],programme=null,posted=[],requests=[],failNext=false,periodClosed=false;
 global.fetch=async(url,init)=>{
@@ -25,7 +25,7 @@ global.fetch=async(url,init)=>{
   if(b.action==='request-holiday-work')requests.push({id:'holiday',status:'Pending',body:{...b,type:'holiday_work',from:b.date,programmes:[{month:b.month,before:[],after:[{date:b.date,type:'visit',routes:b.routes,reason:b.reason}]}]}});
   return new Response(JSON.stringify({ok:true}));
  }
- return new Response(JSON.stringify({calendar,periodClosed,programme,dailyProgrammes:plans,routes,requests,holidayWork:[],leave:[],programmes:[...(programme?[{id:'month',assigned_to:user.email,data:programme}]:[]),...plans.map(p=>({id:p.startsOn,assigned_to:user.email,data:p}))]}));
+ return new Response(JSON.stringify({calendar,periodClosed,programme,dailyProgrammes:plans,routes,requests,holidayWork:[],leave:[],programmes:[...(programme?[{id:'month',assigned_to:user.email,data:programme,calendarConfirmed:calendar.confirmed}]:[]),...plans.map(p=>({id:p.startsOn,assigned_to:user.email,data:p,calendarConfirmed:calendar.confirmed}))]}));
 };
 const errors=[],originalError=console.error;console.error=(...a)=>errors.push(a.join(' '));
 const settle=()=>act(async()=>{await new Promise(r=>setTimeout(r,5))});
@@ -43,7 +43,7 @@ async function mount(Component,props){root=createRoot(document.getElementById('r
  await act(async()=>{row('2026-11-04').querySelector('input[type=checkbox]').click();row('2026-11-06').querySelectorAll('input[type=checkbox]')[1].click()});
  assert([...document.querySelectorAll('button')].find(b=>b.textContent.includes('Submit month for approval')).disabled);
  await click('Submit this day',row('2026-11-04'));assert.equal(posted.at(-1).action,'submit-day');assert.equal(posted.at(-1).date,'2026-11-04');assert.equal(posted.at(-1).days.length,1);
- assert(row('2026-11-04').textContent.includes('Daily approval pending'));assert(!row('2026-11-04').querySelector('select'));
+ assert(document.getElementById('tour-month-submit-help').textContent.includes('pending daily submission'));assert(row('2026-11-04').textContent.includes('Daily approval pending'));assert(!row('2026-11-04').querySelector('select'));
  assert(row('2026-11-06').querySelectorAll('input[type=checkbox]')[1].checked,'Submitting one day must preserve other unsaved route choices');
  await click('Review day',row('2026-11-04'));assert.equal(selectedDate().value,'2026-11-04');await click('Withdraw daily submission');assert(document.querySelector('.daily-tour-fields'));
  await act(async()=>root.unmount());plans=[];posted=[];
@@ -56,7 +56,10 @@ async function mount(Component,props){root=createRoot(document.getElementById('r
  await act(async()=>root.unmount());
  await mount(TourApprovals,{team:[user],rows:routes.map(r=>({id:r.id,kind:'Routes',data:{Name:r.name}})),refresh(){}});
  assert(document.body.textContent.includes('Daily plan'));assert(document.body.textContent.includes('Family appointment'));assert(!document.body.textContent.includes('Approve month'));
+ assert([...document.querySelectorAll('button')].find(b=>b.textContent==='Approve day').disabled,'Admin must publish holidays before approval, not before submission');
+ assert(document.body.textContent.includes('Publish holidays for 2026-11'));
  await input(document.querySelector('.tour-review-card input'),'Choose a working route instead');await click('Reject day');assert.equal(posted.at(-1).action,'reject-day');assert.equal(posted.at(-1).date,'2026-11-05');await act(async()=>root.unmount());
+ calendar.confirmed=true;calendar.revision=1;
  await mount(MonthlyTour,{user,team:[],refresh(){}});await click('Single day');await input(selectedDate(),'2026-11-05');assert(document.body.textContent.includes('Choose a working route instead'));
  await input(document.querySelector('select[aria-label="Daily plan type"]'),'visit');await act(async()=>document.querySelector('.daily-tour-fields input[type=checkbox]').click());
  failNext=true;await click('Submit day for approval');assert(document.querySelector('[role=alert]').textContent.includes('Programme changed'));assert.equal(selectedDate().value,'2026-11-05');await click('Submit day for approval');
@@ -67,6 +70,13 @@ async function mount(Component,props){root=createRoot(document.getElementById('r
  await input(selectedDate(),'2026-11-06');assert(document.querySelector('.daily-tour-fields'));await input(selectedDate(),'2026-11-03');assert(document.body.textContent.includes('Past dates are read-only'));assert(!document.querySelector('.daily-tour-fields'));
  await click('Full month');const approvedRow=[...document.querySelectorAll('.monthly-tour-day')].find(r=>r.textContent.includes('Thu, 5 Nov'));assert(approvedRow);assert(approvedRow.textContent.includes('Daily approved'));assert(!approvedRow.querySelector('select'));assert(approvedRow.textContent.includes('Erode route'));
  await act(async()=>document.querySelectorAll('.tour-fill input[type=checkbox]')[1].click());await click('Fill working days with these routes');assert(approvedRow.textContent.includes('Erode route'));await click('Save draft');assert.deepEqual(posted.at(-1).days.find(d=>d.date==='2026-11-05').routes,['erode']);
+ const monthlySubmit=()=>[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Submit month for approval'));
+ assert(!monthlySubmit().disabled,'Pending holiday requests do not block the regular monthly programme');
+ plans.push({scope:'day',month:'2026-11',startsOn:'2026-11-03',status:'Pending',revision:1,history:[],days:[{date:'2026-11-03',type:'visit',routes:['erode'],reason:''}]});
+ await click('Refresh programme');assert(!monthlySubmit().disabled,'A daily submission before this programme starts must not block the month');plans=plans.filter(p=>p.startsOn!=='2026-11-03');
+ const changedDay={date:'2026-11-05',type:'visit',routes:['erode'],reason:''};
+ requests.push({id:'pending-routes',status:'Pending',body:{type:'routes',reason:'Customer appointment change',programmes:[{month:'2026-11',before:[changedDay],after:[changedDay]}]}});
+ await click('Refresh programme');assert(monthlySubmit().disabled);assert(document.getElementById('tour-month-submit-help').textContent.includes('pending schedule changes'));requests=requests.filter(r=>r.id!=='pending-routes');
  await act(async()=>root.unmount());
  // A pending month provides an actionable way to switch to one-day submission.
  plans=[];programme={month:'2026-11',startsOn:'2026-11-04',status:'Pending',revision:12,history:[],days:[{date:'2026-11-04',type:'visit',routes:['erode'],reason:''}]};
