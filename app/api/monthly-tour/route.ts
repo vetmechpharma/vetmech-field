@@ -18,7 +18,7 @@ export async function GET(req:Request){try{
  const periodClosed=!!await db().prepare('SELECT month FROM period_locks WHERE closed=1 AND month>=? LIMIT 1').bind(month).first();
  const programmes=rows.filter(r=>r.kind===programmeKind&&(m.role==='admin'||r.assigned_to===m.email)&&(!owner||r.assigned_to===owner.email)&&((r.data as unknown as Programme).month===month||q.get('review')==='1'&&(r.data as unknown as Programme).status==='Pending'));
  const requests=(await db().prepare("SELECT * FROM workflow_requests WHERE kind='tour_change' ORDER BY created DESC").all<any>()).results.filter(r=>(m.role==='admin'||r.mr_email===m.email)&&(!owner||r.mr_email===owner.email)).map(r=>({...r,body:JSON.parse(r.body)})).filter(r=>r.body.programmes?.some((p:any)=>p.month===month)||q.get('review')==='1'&&r.status==='Pending');
- return json({calendar,periodClosed,holidayWork:rows.filter(r=>r.kind===holidayWorkKind&&(m.role==='admin'||r.assigned_to===m.email)&&(!owner||r.assigned_to===owner.email)&&r.data.date.startsWith(month)).map(r=>({...r.data,email:r.assigned_to})),programme:owner?programmeFrom(rows,owner.email,month):null,dailyProgrammes:owner?programmes.filter(r=>(r.data as unknown as Programme).scope==='day').map(r=>r.data).sort((a,b)=>a.startsOn.localeCompare(b.startsOn)):[],programmes,requests,routes:owner?routesFor(owner,rows).map(r=>({id:r.id,name:r.data.Name,district:r.data.District})):[],leave:owner?rows.filter(r=>r.kind==='Leave'&&r.assigned_to===owner.email&&r.data.Status==='Approved'):[],today:indiaDay()});
+ return json({calendar,periodClosed,holidayWork:rows.filter(r=>r.kind===holidayWorkKind&&(m.role==='admin'||r.assigned_to===m.email)&&(!owner||r.assigned_to===owner.email)&&r.data.date.startsWith(month)).map(r=>({...r.data,email:r.assigned_to})),programme:owner?programmeFrom(rows,owner.email,month):null,dailyProgrammes:owner?programmes.filter(r=>(r.data as unknown as Programme).scope==='day').map(r=>r.data).sort((a,b)=>a.startsOn.localeCompare(b.startsOn)):[],programmes:programmes.map(r=>({...r,calendarConfirmed:calendarFrom(rows,(r.data as unknown as Programme).month).confirmed})),requests,routes:owner?routesFor(owner,rows).map(r=>({id:r.id,name:r.data.Name,district:r.data.District})):[],leave:owner?rows.filter(r=>r.kind==='Leave'&&r.assigned_to===owner.email&&r.data.Status==='Approved'):[],today:indiaDay()});
 }catch(e){return failure(e)}}
 export async function POST(req:Request){try{
  sameOrigin(req);const m=await member(),b=await readJSON(req,256*1024) as any,now=new Date().toISOString(),today=indiaDay(),{rows,stamp}=await tourSnapshot(),statements=[guard('version',`(${stateSQL})=?`,[stamp])];
@@ -96,7 +96,7 @@ export async function POST(req:Request){try{
    for(const plan of approvedDays){const approved=plan.days[0],entry=days.find(d=>d.date===approved.date);if(entry&&!sameTourDay(entry,approved))throw new HttpError(409,`${approved.date} already has an approved daily plan. Request a schedule change before replacing it.`);if(!entry)days.push(approved);}
    const validRoutes=routesFor(owner,rows);for(const d of days){checkDay(d,calendar,action==='submit');if(d.routes.some(id=>!validRoutes.some(r=>r.id===id)))throw new HttpError(400,'Choose routes assigned or accessible to this MR.');if(d.type==='leave')d.routes=[];}
    if(action==='submit'){
-    if(!calendar.confirmed)throw new HttpError(409,'Admin must confirm this month’s holiday calendar first.');
+    // Routes may await review before holidays are published; approval and visits still require publication.
     if(!daily){const missing=workingDates(month,calendar,next.startsOn).filter(date=>!days.some(d=>d.date===date));if(missing.length)throw new HttpError(400,'Complete every working day. Missing: '+missing.slice(0,5).join(', '));}
     await checkMonthlyOverlap();next.status='Pending';next.submittedAt=now;next.calendarRevision=calendar.revision;
     statements.push(notification(OWNER_EMAIL,title+' awaiting approval',`${owner.name} · ${label}`,'Approvals',id));
@@ -105,7 +105,8 @@ export async function POST(req:Request){try{
   else{
    if(m.role!=='admin')throw new HttpError(403,'Admin approval is required.');if(old?.status!=='Pending')throw new HttpError(409,'Programme already reviewed or not submitted.');
    if(action==='approve'){
-    if(!calendar.confirmed||next.calendarRevision!==calendar.revision)throw new HttpError(409,'Holiday calendar changed. Reject this submission so the MR can review and resubmit it.');
+    if(!calendar.confirmed)throw new HttpError(409,'Publish holidays for '+month+' in Tour programme before approving this plan. The submission stays pending.');
+    if(next.calendarRevision!==calendar.revision)throw new HttpError(409,'Holiday calendar changed. Reject this submission so the MR can review and resubmit it.');
     for(const d of next.days)checkDay(d,calendar);
     if(daily&&(next.days.length!==1||next.days[0].date!==date))throw new HttpError(409,'Invalid daily submission. Reject it and ask the MR to resubmit.');
     if(!daily&&workingDates(month,calendar,next.startsOn).some(date=>!next.days.some(d=>d.date===date)))throw new HttpError(409,'The programme does not cover every working day.');

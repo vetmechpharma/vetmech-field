@@ -15,15 +15,21 @@ module.exports=async function(c){
  const get=(u=alice)=>api.GET(new Request('https://app.test/api/monthly-tour?month='+month+'&email='+encodeURIComponent(u.email))).then(r=>ok(r));
  const fullDays=()=>logic.workingDates(month,calendar(),first).map(date=>read(date)?.status==='Approved'?read(date).days[0]:day(date));
  const monthAction=(action,extra={},status=200)=>call({action,email:alice.email,month,revision:readMonth()?.revision||0,days:fullDays(),...extra},status);
- who(alice);await action('submit',first,{},409);await action('save',first,{},403,bob);
- await ok(await api.POST(request({action:'submit-day',month,date:first,days:[day()]},'POST','https://evil.test')),403);
- who(owner);await call({action:'calendar',month,revision:0,holidays:calendar().holidays,reason:'Publish the daily planning test month'});
- setClock(first+'T06:00:00Z');who(alice);
- await action('submit',first,{days:[day(first,[r2.id])]},400);
+ who(alice);await action('submit',first,{days:[day(first,[r2.id])]},400);
  await action('submit',first,{days:[day(first),day(second)]},400);
  await action('submit',first,{days:[day(second)]},400);
  await action('save',first,{days:[day(first,[])]});await action('submit',first,{days:[day(first,[])]},400);
- await action('submit');const pendingRevision=read(first).revision;assert.equal(read(first).status,'Pending');assert.equal(readMonth(),null);
+ await action('submit');assert.equal(read(first).status,'Pending');assert.equal(calendar().confirmed,false);
+ who(owner);const unpublished=await action('approve',first,{},409);assert(unpublished.error.includes('Publish holidays'));assert.equal(read(first).status,'Pending');
+ who(alice);await action('save',first,{},403,bob);
+ await ok(await api.POST(request({action:'submit-day',month,date:first,days:[day()]},'POST','https://evil.test')),403);
+ who(owner);await call({action:'calendar',month,revision:0,holidays:calendar().holidays,reason:'Publish the daily planning test month'});
+ assert.equal(read(first).status,'Pending');assert.equal(read(first).calendarRevision,calendar().revision);
+ // Publication makes this pending date reviewable without making the MR resubmit.
+ await action('approve');assert.equal(read(first).status,'Approved');
+ // Isolate the initial publication scenario from the rejection/resubmission cases below.
+ sql.prepare('DELETE FROM records WHERE id=?').run(logic.dailyProgrammeID(alice.email,first));
+ setClock(first+'T06:00:00Z');who(alice);await action('submit');const pendingRevision=read(first).revision;assert.equal(read(first).status,'Pending');assert.equal(readMonth(),null);
  assert.equal((await ok(await records.GET())).tourGate.allowed,false);
  const checklist=load(path.join(root,'lib/closing-checklist.ts')).closingChecklist(month,[],[],[],[],[],sql.prepare('SELECT * FROM records').all().map(r=>({...r,data:JSON.parse(r.data)})));
  assert(checklist[1].items.some(r=>r.label==='Daily tour plan'&&r.detail.includes(first)));
